@@ -1,0 +1,19 @@
+▲ Next.js 16.2.6 (Turbopack)
+- Environments: .env
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 13.7s
+  Running TypeScript ...
+Failed to type check.
+
+./src/App.tsx:252:177
+Type error: Cannot find name 'CHILDREN'. Did you mean 'children'?
+
+  [90m250 |[0m ...acity: [35m0[0m, y: [35m10[0m }} transition={{ [36mtype[0m: [32m"spring"[0m, duration: [35m0.35[0m }} className=[32m"w-full m...[0m
+  [90m251 |[0m ...
+[31m[1m>[0m [90m252 |[0m ...[35mum text-slate-500 mt-0.5">Bekele family · {CHILDREN.length} children enrolled</p[0m></div>
+  [90m    |[0m                                              [31m[1m^[0m
+  [90m253 |[0m ...[32m text-slate-500 flex items-center justify-center transition-all cursor-pointer border-...[0m
+  [90m254 |[0m ...
+  [90m255 |[0m ...[32mn cursor-pointer transition-colors group select-none"[0m onClick={() => { setToastMessage.[32m..[0m
+Next.js build worker exited with code: 1 and signal: null

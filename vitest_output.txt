@@ -1,0 +1,9 @@
+
+ RUN  v4.1.7 C:/Users/RAPTOR/antigravity/Kelem-Parent-Portal
+
+
+ Test Files  5 passed (5)
+      Tests  13 passed (13)
+   Start at  12:09:41
+   Duration  10.75s (transform 959ms, setup 0ms, import 4.48s, tests 856ms, environment 33.70s)
+

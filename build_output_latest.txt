@@ -1,0 +1,24 @@
+
+> react-example@0.0.0 build
+> next build
+
+▲ Next.js 16.2.6 (Turbopack)
+- Environments: .env
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 15.5s
+  Running TypeScript ...
+Failed to type check.
+
+./src/App.tsx:263:18
+Type error: Cannot find name 'CHILDREN'. Did you mean 'children'?
+
+  [90m261 |[0m               </div>
+  [90m262 |[0m               <div className=[32m"divide-y divide-slate-100 overflow-hidden rounded-b-3xl"[0m>
+[31m[1m>[0m [90m263 |[0m                 {[33mCHILDREN[0m.map((c: [33mChild[0m, i: number) => (
+  [90m    |[0m                  [31m[1m^[0m
+  [90m264 |[0m                   <div key={c.id} onClick={() => { setSelectedChildIndex(i); setIsChildMo...
+  [90m265 |[0m                     <div className={[32m`w-12 h-12 rounded-full [0m${avatarColors[i][32m} text-white...[0m
+  [90m266 |[0m                     <div className=[32m"flex-1 min-w-0"[0m>
+Next.js build worker exited with code: 1 and signal: null
+BUILD_FAILED 
