@@ -2,9 +2,11 @@ import { http, HttpResponse } from 'msw';
 import { CHILDREN } from '@/lib/mockData';
 import type { ApiResponse, GradesResponse } from '@/types/api';
 
+const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
+
 export const gradesHandlers = [
   // GET /v1/children/:id/grades
-  http.get('/v1/children/:id/grades', ({ params }) => {
+  http.get(`${BASE}/v1/children/:id/grades`, ({ params }) => {
     const { id } = params as { id: string };
     const child = CHILDREN.find((c) => c.id === id);
 

@@ -3,9 +3,11 @@ import { CHILDREN } from '@/lib/mockData';
 import type { ApiResponse, PaginatedResponse, SendMessageRequest } from '@/types/api';
 import type { MessageEntry, MessageThread, ThreadMessage } from '@/types/message';
 
+const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
+
 export const messagesHandlers = [
   // GET /v1/messages — aggregate all children's messages
-  http.get('/v1/messages', () => {
+  http.get(`${BASE}/v1/messages`, () => {
     const items: MessageEntry[] = CHILDREN.flatMap((child) => child.messages);
 
     const body: ApiResponse<PaginatedResponse<MessageEntry>> = {
@@ -22,10 +24,9 @@ export const messagesHandlers = [
   }),
 
   // GET /v1/messages/:threadId — get a full message thread
-  http.get('/v1/messages/:threadId', ({ params }) => {
+  http.get(`${BASE}/v1/messages/:threadId`, ({ params }) => {
     const { threadId } = params as { threadId: string };
 
-    // Find the matching message across all children
     const allMessages = CHILDREN.flatMap((child) => child.messages);
     const message = allMessages.find((m) => m.id === threadId);
 
@@ -63,7 +64,7 @@ export const messagesHandlers = [
   }),
 
   // POST /v1/messages/:threadId/reply — send a reply
-  http.post('/v1/messages/:threadId/reply', async ({ request }) => {
+  http.post(`${BASE}/v1/messages/:threadId/reply`, async ({ request }) => {
     const reqBody = (await request.json()) as SendMessageRequest;
 
     const newMessage: ThreadMessage = {

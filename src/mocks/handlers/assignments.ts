@@ -3,9 +3,11 @@ import { CHILDREN } from '@/lib/mockData';
 import type { ApiResponse, PaginatedResponse } from '@/types/api';
 import type { AssignmentEntry, HomeworkEntry } from '@/types/assignment';
 
+const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
+
 export const assignmentsHandlers = [
   // GET /v1/children/:id/assignments
-  http.get('/v1/children/:id/assignments', ({ params }) => {
+  http.get(`${BASE}/v1/children/:id/assignments`, ({ params }) => {
     const { id } = params as { id: string };
     const child = CHILDREN.find((c) => c.id === id);
 
@@ -38,7 +40,7 @@ export const assignmentsHandlers = [
   }),
 
   // GET /v1/children/:id/homework
-  http.get('/v1/children/:id/homework', ({ params }) => {
+  http.get(`${BASE}/v1/children/:id/homework`, ({ params }) => {
     const { id } = params as { id: string };
     const child = CHILDREN.find((c) => c.id === id);
 

@@ -3,9 +3,11 @@ import { CHILDREN } from '@/lib/mockData';
 import type { ApiResponse, PaginatedResponse } from '@/types/api';
 import type { Child } from '@/types/child';
 
+const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
+
 export const childrenHandlers = [
   // GET /v1/children — list all children
-  http.get('/v1/children', () => {
+  http.get(`${BASE}/v1/children`, () => {
     const items = CHILDREN;
     const body: ApiResponse<PaginatedResponse<Child>> = {
       success: true,
@@ -21,7 +23,7 @@ export const childrenHandlers = [
   }),
 
   // GET /v1/children/:childId — get a single child
-  http.get('/v1/children/:childId', ({ params }) => {
+  http.get(`${BASE}/v1/children/:childId`, ({ params }) => {
     const { childId } = params as { childId: string };
     const child = CHILDREN.find((c) => c.id === childId);
 

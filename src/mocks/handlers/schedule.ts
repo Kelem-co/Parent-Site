@@ -3,9 +3,11 @@ import { CHILDREN } from '@/lib/mockData';
 import type { ApiResponse, PaginatedResponse } from '@/types/api';
 import type { ScheduleEntry } from '@/types/schedule';
 
+const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
+
 export const scheduleHandlers = [
   // GET /v1/children/:id/schedule
-  http.get('/v1/children/:id/schedule', ({ params }) => {
+  http.get(`${BASE}/v1/children/:id/schedule`, ({ params }) => {
     const { id } = params as { id: string };
     const child = CHILDREN.find((c) => c.id === id);
 

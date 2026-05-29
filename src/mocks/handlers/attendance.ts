@@ -3,9 +3,11 @@ import { CHILDREN } from '@/lib/mockData';
 import type { ApiResponse, AttendanceResponse } from '@/types/api';
 import type { AttendanceLogEntry } from '@/types/child';
 
+const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
+
 export const attendanceHandlers = [
   // GET /v1/children/:id/attendance
-  http.get('/v1/children/:id/attendance', ({ params }) => {
+  http.get(`${BASE}/v1/children/:id/attendance`, ({ params }) => {
     const { id } = params as { id: string };
     const child = CHILDREN.find((c) => c.id === id);
 
@@ -48,7 +50,7 @@ export const attendanceHandlers = [
   }),
 
   // POST /v1/children/:id/attendance/absence
-  http.post('/v1/children/:id/attendance/absence', async ({ params, request }) => {
+  http.post(`${BASE}/v1/children/:id/attendance/absence`, async ({ params, request }) => {
     const { id } = params as { id: string };
     const child = CHILDREN.find((c) => c.id === id);
 

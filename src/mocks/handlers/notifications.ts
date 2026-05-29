@@ -3,9 +3,11 @@ import { CHILDREN } from '@/lib/mockData';
 import type { ApiResponse, PaginatedResponse } from '@/types/api';
 import type { NotificationEntry } from '@/types/notification';
 
+const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
+
 export const notificationsHandlers = [
   // GET /v1/children/:id/notifications
-  http.get('/v1/children/:id/notifications', ({ params }) => {
+  http.get(`${BASE}/v1/children/:id/notifications`, ({ params }) => {
     const { id } = params as { id: string };
     const child = CHILDREN.find((c) => c.id === id);
 
