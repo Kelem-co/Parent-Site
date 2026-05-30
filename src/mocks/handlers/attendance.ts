@@ -6,8 +6,8 @@ import type { AttendanceLogEntry } from '@/types/child';
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
 
 export const attendanceHandlers = [
-  // GET /v1/children/:id/attendance
-  http.get(`${BASE}/v1/children/:id/attendance`, ({ params }) => {
+  // GET /api/children/:id/attendance
+  http.get(`${BASE}/api/children/:id/attendance`, ({ params }) => {
     const { id } = params as { id: string };
     const child = CHILDREN.find((c) => c.id === id);
 
@@ -49,8 +49,8 @@ export const attendanceHandlers = [
     return HttpResponse.json(body);
   }),
 
-  // POST /v1/children/:id/attendance/absence
-  http.post(`${BASE}/v1/children/:id/attendance/absence`, async ({ params, request }) => {
+  // POST /api/children/:id/attendance/absence
+  http.post(`${BASE}/api/children/:id/attendance/absence`, async ({ params, request }) => {
     const { id } = params as { id: string };
     const child = CHILDREN.find((c) => c.id === id);
 

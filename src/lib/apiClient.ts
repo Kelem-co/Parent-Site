@@ -55,8 +55,8 @@ apiClient.interceptors.response.use(
     const status = error.response?.status;
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
-    // 401: attempt token refresh, then retry once
-    if (status === 401 && !originalRequest._retry) {
+    // 401: try refresh once, then retry the original request.
+    if (status === 401 && !originalRequest?._retry) {
       if (isRefreshing) {
         return new Promise((resolve) => {
           subscribeTokenRefresh((token) => {
@@ -68,7 +68,6 @@ apiClient.interceptors.response.use(
 
       originalRequest._retry = true;
       isRefreshing = true;
-
       try {
         const { refreshToken } = await import('@/services/authService');
         const newToken = await refreshToken();

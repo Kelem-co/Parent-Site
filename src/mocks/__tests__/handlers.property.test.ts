@@ -23,8 +23,8 @@ import type { ScheduleEntry } from '@/types/schedule';
 
 /**
  * MSW v2 in Node mode does not resolve relative paths against any origin —
- * relative paths like '/v1/children' are kept as-is and matched against the
- * full request URL, which means they do NOT match 'http://localhost:4000/v1/children'.
+ * relative paths like '/api/children' are kept as-is and matched against the
+ * full request URL, which means they do NOT match 'http://localhost:4000/api/children'.
  *
  * To test the real handler logic (fixture data + ApiResponse envelope) while
  * using the correct full-URL matching, we re-implement the handlers here with
@@ -43,8 +43,8 @@ const BASE = 'http://localhost:4000';
 // response shapes, but with absolute URLs so MSW Node can match them.
 
 const server = setupServer(
-  // GET /v1/children
-  http.get(`${BASE}/v1/children`, () => {
+  // GET /api/children
+  http.get(`${BASE}/api/children`, () => {
     const items = CHILDREN;
     const body: ApiResponse<PaginatedResponse<Child>> = {
       success: true,
@@ -54,8 +54,8 @@ const server = setupServer(
     return HttpResponse.json(body);
   }),
 
-  // GET /v1/children/:childId
-  http.get(`${BASE}/v1/children/:childId`, ({ params }) => {
+  // GET /api/children/:childId
+  http.get(`${BASE}/api/children/:childId`, ({ params }) => {
     const { childId } = params as { childId: string };
     const child = CHILDREN.find((c) => c.id === childId);
     if (!child) {
@@ -72,8 +72,8 @@ const server = setupServer(
     return HttpResponse.json(body);
   }),
 
-  // GET /v1/children/:id/assignments
-  http.get(`${BASE}/v1/children/:id/assignments`, ({ params }) => {
+  // GET /api/children/:id/assignments
+  http.get(`${BASE}/api/children/:id/assignments`, ({ params }) => {
     const { id } = params as { id: string };
     const child = CHILDREN.find((c) => c.id === id);
     if (!child) {
@@ -91,8 +91,8 @@ const server = setupServer(
     return HttpResponse.json(body);
   }),
 
-  // GET /v1/children/:id/attendance
-  http.get(`${BASE}/v1/children/:id/attendance`, ({ params }) => {
+  // GET /api/children/:id/attendance
+  http.get(`${BASE}/api/children/:id/attendance`, ({ params }) => {
     const { id } = params as { id: string };
     const child = CHILDREN.find((c) => c.id === id);
     if (!child) {
@@ -121,8 +121,8 @@ const server = setupServer(
     return HttpResponse.json(body);
   }),
 
-  // GET /v1/children/:id/grades
-  http.get(`${BASE}/v1/children/:id/grades`, ({ params }) => {
+  // GET /api/children/:id/grades
+  http.get(`${BASE}/api/children/:id/grades`, ({ params }) => {
     const { id } = params as { id: string };
     const child = CHILDREN.find((c) => c.id === id);
     if (!child) {
@@ -140,8 +140,8 @@ const server = setupServer(
     return HttpResponse.json(body);
   }),
 
-  // GET /v1/messages
-  http.get(`${BASE}/v1/messages`, () => {
+  // GET /api/messages
+  http.get(`${BASE}/api/messages`, () => {
     const items: MessageEntry[] = CHILDREN.flatMap((c) => c.messages);
     const body: ApiResponse<PaginatedResponse<MessageEntry>> = {
       success: true,
@@ -151,8 +151,8 @@ const server = setupServer(
     return HttpResponse.json(body);
   }),
 
-  // GET /v1/children/:id/notifications
-  http.get(`${BASE}/v1/children/:id/notifications`, ({ params }) => {
+  // GET /api/children/:id/notifications
+  http.get(`${BASE}/api/children/:id/notifications`, ({ params }) => {
     const { id } = params as { id: string };
     const child = CHILDREN.find((c) => c.id === id);
     if (!child) {
@@ -170,8 +170,8 @@ const server = setupServer(
     return HttpResponse.json(body);
   }),
 
-  // GET /v1/children/:id/schedule
-  http.get(`${BASE}/v1/children/:id/schedule`, ({ params }) => {
+  // GET /api/children/:id/schedule
+  http.get(`${BASE}/api/children/:id/schedule`, ({ params }) => {
     const { id } = params as { id: string };
     const child = CHILDREN.find((c) => c.id === id);
     if (!child) {
@@ -201,8 +201,8 @@ afterAll(() => server.close());
  * Validates: Requirements 7.2, 7.5
  */
 describe('Mock handlers (Property 8)', () => {
-  it('GET /v1/children returns ApiResponse envelope with success:true and data', async () => {
-    const res = await fetch(`${BASE}/v1/children`);
+  it('GET /api/children returns ApiResponse envelope with success:true and data', async () => {
+    const res = await fetch(`${BASE}/api/children`);
     const json = await res.json() as Record<string, unknown>;
     expect(json.success).toBe(true);
     expect(json.data).toBeDefined();
@@ -211,18 +211,18 @@ describe('Mock handlers (Property 8)', () => {
     expect(typeof data.total).toBe('number');
   });
 
-  it('GET /v1/children/:id returns ApiResponse envelope for each child', async () => {
+  it('GET /api/children/:id returns ApiResponse envelope for each child', async () => {
     // Property: for any valid child ID from fixture data, response conforms to envelope
     for (const child of CHILDREN) {
-      const res = await fetch(`${BASE}/v1/children/${child.id}`);
+      const res = await fetch(`${BASE}/api/children/${child.id}`);
       const json = await res.json() as Record<string, unknown>;
       expect(json.success).toBe(true);
       expect(json.data).toBeDefined();
     }
   });
 
-  it('GET /v1/messages returns ApiResponse envelope with paginated items', async () => {
-    const res = await fetch(`${BASE}/v1/messages`);
+  it('GET /api/messages returns ApiResponse envelope with paginated items', async () => {
+    const res = await fetch(`${BASE}/api/messages`);
     const json = await res.json() as Record<string, unknown>;
     expect(json.success).toBe(true);
     const data = json.data as Record<string, unknown>;
@@ -230,7 +230,7 @@ describe('Mock handlers (Property 8)', () => {
   });
 
   it('unknown child ID returns 404 with success:false', async () => {
-    const res = await fetch(`${BASE}/v1/children/NONEXISTENT-999`);
+    const res = await fetch(`${BASE}/api/children/NONEXISTENT-999`);
     const json = await res.json() as Record<string, unknown>;
     expect(res.status).toBe(404);
     expect(json.success).toBe(false);

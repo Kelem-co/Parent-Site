@@ -6,8 +6,8 @@ import type { AssignmentEntry, HomeworkEntry } from '@/types/assignment';
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
 
 export const assignmentsHandlers = [
-  // GET /v1/children/:id/assignments
-  http.get(`${BASE}/v1/children/:id/assignments`, ({ params }) => {
+  // GET /api/children/:id/assignments
+  http.get(`${BASE}/api/children/:id/assignments`, ({ params }) => {
     const { id } = params as { id: string };
     const child = CHILDREN.find((c) => c.id === id);
 
@@ -39,8 +39,8 @@ export const assignmentsHandlers = [
     return HttpResponse.json(body);
   }),
 
-  // GET /v1/children/:id/homework
-  http.get(`${BASE}/v1/children/:id/homework`, ({ params }) => {
+  // GET /api/children/:id/homework
+  http.get(`${BASE}/api/children/:id/homework`, ({ params }) => {
     const { id } = params as { id: string };
     const child = CHILDREN.find((c) => c.id === id);
 

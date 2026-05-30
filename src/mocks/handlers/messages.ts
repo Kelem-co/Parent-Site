@@ -6,8 +6,8 @@ import type { MessageEntry, MessageThread, ThreadMessage } from '@/types/message
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
 
 export const messagesHandlers = [
-  // GET /v1/messages — aggregate all children's messages
-  http.get(`${BASE}/v1/messages`, () => {
+  // GET /api/messages — aggregate all children's messages
+  http.get(`${BASE}/api/messages`, () => {
     const items: MessageEntry[] = CHILDREN.flatMap((child) => child.messages);
 
     const body: ApiResponse<PaginatedResponse<MessageEntry>> = {
@@ -23,8 +23,8 @@ export const messagesHandlers = [
     return HttpResponse.json(body);
   }),
 
-  // GET /v1/messages/:threadId — get a full message thread
-  http.get(`${BASE}/v1/messages/:threadId`, ({ params }) => {
+  // GET /api/messages/:threadId — get a full message thread
+  http.get(`${BASE}/api/messages/:threadId`, ({ params }) => {
     const { threadId } = params as { threadId: string };
 
     const allMessages = CHILDREN.flatMap((child) => child.messages);
@@ -63,8 +63,8 @@ export const messagesHandlers = [
     return HttpResponse.json(body);
   }),
 
-  // POST /v1/messages/:threadId/reply — send a reply
-  http.post(`${BASE}/v1/messages/:threadId/reply`, async ({ request }) => {
+  // POST /api/messages/:threadId/reply — send a reply
+  http.post(`${BASE}/api/messages/:threadId/reply`, async ({ request }) => {
     const reqBody = (await request.json()) as SendMessageRequest;
 
     const newMessage: ThreadMessage = {

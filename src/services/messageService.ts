@@ -6,7 +6,7 @@ export async function getMessages(
   params?: { page?: number; pageSize?: number }
 ): Promise<MessageEntry[]> {
   const res = await apiClient.get<ApiResponse<PaginatedResponse<MessageEntry>>>(
-    '/v1/messages',
+    '/api/messages',
     { params }
   );
   return res.data.data.items;
@@ -14,7 +14,7 @@ export async function getMessages(
 
 export async function getMessageThread(threadId: string): Promise<MessageThread> {
   const res = await apiClient.get<ApiResponse<MessageThread>>(
-    `/v1/messages/${threadId}`
+    `/api/messages/${threadId}`
   );
   return res.data.data;
 }
@@ -24,7 +24,7 @@ export async function sendMessage(
   body: SendMessageRequest
 ): Promise<ThreadMessage> {
   const res = await apiClient.post<ApiResponse<ThreadMessage>>(
-    `/v1/messages/${threadId}/reply`,
+    `/api/messages/${threadId}/reply`,
     body
   );
   return res.data.data;

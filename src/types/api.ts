@@ -43,9 +43,23 @@ export const API_ERROR_CODES = {
 export type ApiErrorCode = typeof API_ERROR_CODES[keyof typeof API_ERROR_CODES];
 
 // Request/response shapes for endpoints not covered by existing types
-export interface LoginRequest {
-  email: string;
-  password: string;
+export interface CompleteInvitationRequest {
+  uid: string;
+  token: string;
+}
+
+export interface OtpRequest {
+  phone_number: string;
+}
+
+export interface OtpVerifyRequest {
+  phone_number: string;
+  otp_code: string;
+}
+
+export interface OtpVerifyResponse {
+  access: string;
+  refresh: string;
 }
 
 export interface AuthResponse {
@@ -55,8 +69,41 @@ export interface AuthResponse {
   parentName: string;
 }
 
+export interface ParentMeResponse {
+  id: string;
+  user: {
+    id: string;
+    name: string;
+    phone_number: string;
+    email?: string | null;
+  };
+  branch?: {
+    id: string;
+    name: string;
+  } | null;
+}
+
+export interface UserMeResponse {
+  id: string;
+  name: string;
+  phone_number?: string;
+  email?: string | null;
+}
+
+export interface ParentStudent {
+  id: string;
+  first_name: string;
+  last_name: string;
+  section_name: string;
+  grade_name: string;
+}
+
 export interface RefreshRequest {
   // Refresh token is sent via HttpOnly cookie; no body field needed
+}
+
+export interface RefreshResponse {
+  access: string;
 }
 
 export interface LogAbsenceRequest {

@@ -6,8 +6,8 @@ import type { Child } from '@/types/child';
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
 
 export const childrenHandlers = [
-  // GET /v1/children — list all children
-  http.get(`${BASE}/v1/children`, () => {
+  // GET /api/children — list all children
+  http.get(`${BASE}/api/children`, () => {
     const items = CHILDREN;
     const body: ApiResponse<PaginatedResponse<Child>> = {
       success: true,
@@ -22,8 +22,8 @@ export const childrenHandlers = [
     return HttpResponse.json(body);
   }),
 
-  // GET /v1/children/:childId — get a single child
-  http.get(`${BASE}/v1/children/:childId`, ({ params }) => {
+  // GET /api/children/:childId — get a single child
+  http.get(`${BASE}/api/children/:childId`, ({ params }) => {
     const { childId } = params as { childId: string };
     const child = CHILDREN.find((c) => c.id === childId);
 

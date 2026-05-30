@@ -15,7 +15,8 @@ import { getGrades } from '../gradeService';
 import { getMessages, sendMessage } from '../messageService';
 import { getNotifications } from '../notificationService';
 import { getSchedule } from '../scheduleService';
-import { login, logout, getAccessToken } from '../authService';
+import { verifyOtp, requestOtp, completeParentInvitation, refreshToken, logout, getAccessToken } from '../authService';
+import { getUserMe, getParentMe, getMyStudents } from '../parentService';
 
 const BASE = 'http://localhost:4000';
 
@@ -27,35 +28,29 @@ afterAll(() => server.close());
 
 // ── childService ──────────────────────────────────────────────────────────────
 describe('childService', () => {
-  it('getChildren calls GET /v1/children and returns items', async () => {
-    const mockChildren = [{ id: 'STU-001', name: 'Test Child' }];
+  it('getChildren calls parent students endpoint and returns mapped children', async () => {
+    const mockChildren = [{ id: 'STU-001', first_name: 'Test', last_name: 'Child', grade_name: '6', section_name: 'A' }];
     server.use(
-      http.get(`${BASE}/v1/children`, () =>
-        HttpResponse.json({ success: true, data: { items: mockChildren, page: 1, pageSize: 20, total: 1 } })
-      )
+      http.get(`${BASE}/api/parents/my-students/`, () => HttpResponse.json(mockChildren)),
+      http.get(`${BASE}/api/attendance-summaries/`, () => HttpResponse.json([]))
     );
     const result = await getChildren();
-    expect(result).toEqual(mockChildren);
+    expect(result[0]?.id).toEqual('STU-001');
   });
 
-  it('getChild calls GET /v1/children/:id and returns child', async () => {
-    const mockChild = { id: 'STU-001', name: 'Test Child' };
+  it('getChild returns mapped child by id from parent students endpoint', async () => {
     server.use(
-      http.get(`${BASE}/v1/children/STU-001`, () =>
-        HttpResponse.json({ success: true, data: mockChild })
-      )
+      http.get(`${BASE}/api/parents/my-students/`, () => HttpResponse.json([{ id: 'STU-001', first_name: 'Test', last_name: 'Child', grade_name: '6', section_name: 'A' }])),
+      http.get(`${BASE}/api/attendance-summaries/`, () => HttpResponse.json([]))
     );
     const result = await getChild('STU-001');
-    expect(result).toEqual(mockChild);
+    expect(result.id).toEqual('STU-001');
   });
 
   it('getChildren propagates ApiError on failure', async () => {
     server.use(
-      http.get(`${BASE}/v1/children`, () =>
-        HttpResponse.json(
-          { success: false, error: { errorCode: 'SERVER_ERROR', message: 'Internal error' } },
-          { status: 500 }
-        )
+      http.get(`${BASE}/api/parents/my-students/`, () =>
+        HttpResponse.json({ error: { errorCode: 'SERVER_ERROR', message: 'Internal error' } }, { status: 500 })
       )
     );
     await expect(getChildren()).rejects.toBeInstanceOf(ApiError);
@@ -64,10 +59,10 @@ describe('childService', () => {
 
 // ── assignmentService ─────────────────────────────────────────────────────────
 describe('assignmentService', () => {
-  it('getAssignments calls GET /v1/children/:id/assignments and returns items', async () => {
+  it('getAssignments calls GET /api/children/:id/assignments and returns items', async () => {
     const mockItems = [{ id: 'ASN-001', title: 'Test Assignment' }];
     server.use(
-      http.get(`${BASE}/v1/children/STU-001/assignments`, () =>
+      http.get(`${BASE}/api/children/STU-001/assignments`, () =>
         HttpResponse.json({ success: true, data: { items: mockItems, page: 1, pageSize: 20, total: 1 } })
       )
     );
@@ -78,10 +73,10 @@ describe('assignmentService', () => {
 
 // ── attendanceService ─────────────────────────────────────────────────────────
 describe('attendanceService', () => {
-  it('getAttendance calls GET /v1/children/:id/attendance and returns response', async () => {
+  it('getAttendance calls GET /api/children/:id/attendance and returns response', async () => {
     const mockData = { log: [], termAttendance: 95, daysPresent: 85, totalDays: 90, absences: 3, lates: 2 };
     server.use(
-      http.get(`${BASE}/v1/children/STU-001/attendance`, () =>
+      http.get(`${BASE}/api/children/STU-001/attendance`, () =>
         HttpResponse.json({ success: true, data: mockData })
       )
     );
@@ -89,10 +84,10 @@ describe('attendanceService', () => {
     expect(result).toEqual(mockData);
   });
 
-  it('logAbsence calls POST /v1/children/:id/attendance/absence and returns entry', async () => {
+  it('logAbsence calls POST /api/children/:id/attendance/absence and returns entry', async () => {
     const mockEntry = { date: '2025-06-10', status: 'absent' };
     server.use(
-      http.post(`${BASE}/v1/children/STU-001/attendance/absence`, () =>
+      http.post(`${BASE}/api/children/STU-001/attendance/absence`, () =>
         HttpResponse.json({ success: true, data: mockEntry }, { status: 201 })
       )
     );
@@ -103,10 +98,10 @@ describe('attendanceService', () => {
 
 // ── gradeService ──────────────────────────────────────────────────────────────
 describe('gradeService', () => {
-  it('getGrades calls GET /v1/children/:id/grades and returns response', async () => {
+  it('getGrades calls GET /api/children/:id/grades and returns response', async () => {
     const mockData = { subjects: [], overallAvg: 88 };
     server.use(
-      http.get(`${BASE}/v1/children/STU-001/grades`, () =>
+      http.get(`${BASE}/api/children/STU-001/grades`, () =>
         HttpResponse.json({ success: true, data: mockData })
       )
     );
@@ -117,10 +112,10 @@ describe('gradeService', () => {
 
 // ── messageService ────────────────────────────────────────────────────────────
 describe('messageService', () => {
-  it('getMessages calls GET /v1/messages and returns items', async () => {
+  it('getMessages calls GET /api/messages and returns items', async () => {
     const mockItems = [{ id: 'M1', teacherName: 'Mr. Test' }];
     server.use(
-      http.get(`${BASE}/v1/messages`, () =>
+      http.get(`${BASE}/api/messages`, () =>
         HttpResponse.json({ success: true, data: { items: mockItems, page: 1, pageSize: 20, total: 1 } })
       )
     );
@@ -128,10 +123,10 @@ describe('messageService', () => {
     expect(result).toEqual(mockItems);
   });
 
-  it('sendMessage calls POST /v1/messages/:threadId/reply and returns message', async () => {
+  it('sendMessage calls POST /api/messages/:threadId/reply and returns message', async () => {
     const mockMsg = { sender: 'parent', text: 'Hello', time: '10:00 AM' };
     server.use(
-      http.post(`${BASE}/v1/messages/T-01/reply`, () =>
+      http.post(`${BASE}/api/messages/T-01/reply`, () =>
         HttpResponse.json({ success: true, data: mockMsg }, { status: 201 })
       )
     );
@@ -142,10 +137,10 @@ describe('messageService', () => {
 
 // ── notificationService ───────────────────────────────────────────────────────
 describe('notificationService', () => {
-  it('getNotifications calls GET /v1/children/:id/notifications and returns items', async () => {
+  it('getNotifications calls GET /api/children/:id/notifications and returns items', async () => {
     const mockItems = [{ id: 'N1', title: 'Test Notification' }];
     server.use(
-      http.get(`${BASE}/v1/children/STU-001/notifications`, () =>
+      http.get(`${BASE}/api/children/STU-001/notifications`, () =>
         HttpResponse.json({ success: true, data: { items: mockItems, page: 1, pageSize: 20, total: 1 } })
       )
     );
@@ -156,10 +151,10 @@ describe('notificationService', () => {
 
 // ── scheduleService ───────────────────────────────────────────────────────────
 describe('scheduleService', () => {
-  it('getSchedule calls GET /v1/children/:id/schedule and returns items', async () => {
+  it('getSchedule calls GET /api/children/:id/schedule and returns items', async () => {
     const mockItems = [{ id: 'S1', subject: 'Math' }];
     server.use(
-      http.get(`${BASE}/v1/children/STU-001/schedule`, () =>
+      http.get(`${BASE}/api/children/STU-001/schedule`, () =>
         HttpResponse.json({ success: true, data: { items: mockItems, page: 1, pageSize: 20, total: 1 } })
       )
     );
@@ -170,21 +165,39 @@ describe('scheduleService', () => {
 
 // ── authService ───────────────────────────────────────────────────────────────
 describe('authService', () => {
-  it('login stores access token and returns AuthResponse', async () => {
-    const mockAuth = { accessToken: 'tok123', expiresIn: 900, parentId: 'P1', parentName: 'Test Parent' };
+  it('verifyOtp stores access token and returns mapped AuthResponse', async () => {
     server.use(
-      http.post(`${BASE}/v1/auth/login`, () =>
-        HttpResponse.json({ success: true, data: mockAuth })
+      http.post(`${BASE}/auth/otp/verify/`, () =>
+        HttpResponse.json({ access: 'tok123', refresh: 'ref123' })
       )
     );
-    const result = await login({ email: 'test@test.com', password: 'pass' });
-    expect(result).toEqual(mockAuth);
+    const result = await verifyOtp({ phone_number: '+251900000000', otp_code: '123456' });
+    expect(result.accessToken).toEqual('tok123');
     expect(getAccessToken()).toBe('tok123');
+  });
+
+  it('requestOtp calls otp request endpoint', async () => {
+    server.use(http.post(`${BASE}/auth/otp/request/`, () => HttpResponse.json({ message: 'OTP sent successfully.' })));
+    const result = await requestOtp('+251900000000');
+    expect(result.message).toContain('OTP sent');
+  });
+
+  it('completeParentInvitation calls complete endpoint', async () => {
+    server.use(http.post(`${BASE}/api/parents/complete-invitation/`, () => HttpResponse.json({ message: 'Parent account activated successfully.' })));
+    const result = await completeParentInvitation({ uid: 'u', token: 't' });
+    expect(result.message).toContain('activated');
+  });
+
+  it('refreshToken updates access token', async () => {
+    server.use(http.post(`${BASE}/auth/jwt/refresh/`, () => HttpResponse.json({ access: 'tok-refreshed' })));
+    const token = await refreshToken();
+    expect(token).toEqual('tok-refreshed');
+    expect(getAccessToken()).toEqual('tok-refreshed');
   });
 
   it('logout clears access token and calls queryClient.clear()', async () => {
     server.use(
-      http.post(`${BASE}/v1/auth/logout`, () =>
+      http.post(`${BASE}/api/auth/logout`, () =>
         HttpResponse.json({ success: true, data: null })
       )
     );
@@ -196,7 +209,7 @@ describe('authService', () => {
 
   it('failed service call propagates ApiError', async () => {
     server.use(
-      http.get(`${BASE}/v1/children`, () =>
+      http.get(`${BASE}/api/children`, () =>
         HttpResponse.json(
           { success: false, error: { errorCode: 'NOT_FOUND', message: 'Not found' } },
           { status: 404 }
@@ -204,5 +217,25 @@ describe('authService', () => {
       )
     );
     await expect(getChildren()).rejects.toBeInstanceOf(ApiError);
+  });
+});
+
+describe('parentService', () => {
+  it('getUserMe calls /api/users/me/', async () => {
+    server.use(http.get(`${BASE}/api/users/me/`, () => HttpResponse.json({ id: 'u1', name: 'Parent User', phone_number: '+251900000000' })));
+    const result = await getUserMe();
+    expect(result.id).toEqual('u1');
+  });
+
+  it('getParentMe calls /api/parents/me/', async () => {
+    server.use(http.get(`${BASE}/api/parents/me/`, () => HttpResponse.json({ id: 'p1', user: { id: 'u1', name: 'Parent User', phone_number: '+251900000000' } })));
+    const result = await getParentMe();
+    expect(result.id).toEqual('p1');
+  });
+
+  it('getMyStudents calls /api/parents/my-students/', async () => {
+    server.use(http.get(`${BASE}/api/parents/my-students/`, () => HttpResponse.json([{ id: 's1', first_name: 'A', last_name: 'B', section_name: 'A', grade_name: '6' }])));
+    const result = await getMyStudents();
+    expect(result[0]?.id).toEqual('s1');
   });
 });
