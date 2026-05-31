@@ -1,17 +1,17 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { sendMessage } from '@/services/messageService';
 import { queryKeys } from '@/lib/queryKeys';
-import type { SendMessageRequest, ApiError } from '@/types/api';
-import type { ThreadMessage } from '@/types/message';
+import { sendChatMessage } from '@/services/messageService';
+import type { ApiError } from '@/types/api';
+import type { ChatMessage, SendChatMessageRequest } from '@/types/message';
 
 export function useSendMessage(threadId: string) {
   const queryClient = useQueryClient();
 
-  return useMutation<ThreadMessage, ApiError, SendMessageRequest>({
-    mutationFn: (body: SendMessageRequest) => sendMessage(threadId, body),
+  return useMutation<ChatMessage, ApiError, SendChatMessageRequest>({
+    mutationFn: (body) => sendChatMessage(threadId, body),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.messageThread(threadId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.messages() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.chatThreadMessages(threadId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.chatThreads() });
     },
   });
 }

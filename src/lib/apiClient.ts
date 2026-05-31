@@ -54,9 +54,19 @@ apiClient.interceptors.response.use(
   async (error: AxiosError) => {
     const status = error.response?.status;
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    const requestUrl = originalRequest?.url ?? '';
+    const isRefreshRequest = requestUrl.includes('/auth/jwt/refresh/');
 
     // 401: try refresh once, then retry the original request.
     if (status === 401 && !originalRequest?._retry) {
+      // If refresh endpoint itself failed, we cannot recover: force unauthenticated flow.
+      if (isRefreshRequest) {
+        onUnauthorized();
+        return Promise.reject(
+          new ApiError(API_ERROR_CODES.UNAUTHORIZED, 'Session expired. Please log in again.', 401)
+        );
+      }
+
       if (isRefreshing) {
         return new Promise((resolve) => {
           subscribeTokenRefresh((token) => {
@@ -99,10 +109,13 @@ apiClient.interceptors.response.use(
     // All other errors: normalize to ApiError
     const responseData = error.response.data as {
       error?: { errorCode?: string; message?: string; details?: Record<string, unknown> };
-    };
+    } & Record<string, unknown>;
     const errorCode = responseData?.error?.errorCode ?? API_ERROR_CODES.UNKNOWN_ERROR;
     const message = responseData?.error?.message ?? error.message;
-    const details = responseData?.error?.details;
+    const details = responseData?.error?.details
+      ?? (responseData && typeof responseData === 'object' && !('error' in responseData)
+        ? (responseData as Record<string, unknown>)
+        : undefined);
 
     return Promise.reject(new ApiError(errorCode, message, status ?? 0, details));
   },

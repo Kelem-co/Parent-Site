@@ -15,6 +15,9 @@ export const PARENT_NAME = 'Bekele';
 export const CHILDREN: Child[] = [
   {
     id: "STU-00421",
+    branchId: "branch-1",
+    branchName: "Main Branch",
+    sectionId: "section-1",
     name: "Sara Bekele",
     initials: "SB",
     grade: "7",
@@ -170,6 +173,9 @@ export const CHILDREN: Child[] = [
   },
   {
     id: "STU-00398",
+    branchId: "branch-1",
+    branchName: "Main Branch",
+    sectionId: "section-2",
     name: "Yonas Bekele",
     initials: "YB",
     grade: "4",
@@ -277,6 +283,9 @@ export const CHILDREN: Child[] = [
   },
   {
     id: "STU-00502",
+    branchId: "branch-1",
+    branchName: "Main Branch",
+    sectionId: "section-3",
     name: "Liya Bekele",
     initials: "LB",
     grade: "10",

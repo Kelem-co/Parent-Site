@@ -1,12 +1,18 @@
 export const queryKeys = {
   children: () => ['children'] as const,
   child: (id: string) => ['children', id] as const,
-  assignments: (childId: string) => ['assignments', childId] as const,
+  branchIdentity: (branchId: string) => ['branches', branchId, 'identity'] as const,
+  assignments: (child: { id: string; branchId: string; sectionId: string | null }) =>
+    ['assignments', child.id, child.branchId, child.sectionId] as const,
   homework: (childId: string) => ['homework', childId] as const,
+  todaysHomework: (childId: string) => ['homework', childId, 'today'] as const,
   attendance: (childId: string) => ['attendance', childId] as const,
   grades: (childId: string) => ['grades', childId] as const,
   messages: () => ['messages'] as const,
   messageThread: (threadId: string) => ['messages', threadId] as const,
+  chatThreads: () => ['chat', 'threads'] as const,
+  chatThreadMessages: (threadId: string) => ['chat', 'threads', threadId, 'messages'] as const,
+  parentMe: () => ['parent', 'me'] as const,
   notifications: (childId: string) => ['notifications', childId] as const,
   schedule: (childId: string) => ['schedule', childId] as const,
 } as const;

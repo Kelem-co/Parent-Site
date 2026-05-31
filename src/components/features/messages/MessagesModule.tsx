@@ -1,18 +1,5 @@
-import React, { useState } from 'react';
-import { motion } from 'motion/react';
-import { 
-  Search, 
-  ChevronLeft, 
-  Phone, 
-  MoreVertical, 
-  CheckCheck, 
-  Send, 
-  X, 
-  Mail, 
-  Clock, 
-  User 
-} from 'lucide-react';
-
+import React, { useMemo, useRef, useState } from 'react';
+import { Search, ChevronLeft, Send, Paperclip, User, Wifi, WifiOff, X } from 'lucide-react';
 import { Child } from '@/types';
 import { useMessageThreads } from '@/hooks';
 
@@ -22,454 +9,322 @@ export interface MessagesModuleProps {
   setActiveThread: (i: number) => void;
 }
 
+function formatTime(value: string | null): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
+}
+
 export const MessagesModule = ({
   child,
   activeThread,
   setActiveThread,
 }: MessagesModuleProps) => {
-  const { threads, selectedIdx, setSelectedIdx, replyText, setReplyText, handleSend, filteredThreads, searchTerm, setSearchTerm } = useMessageThreads();
-  const [mobileView, setMobileView] = useState<"list" | "thread">("list");
-  const [showRightSidebar, setShowRightSidebar] = useState(
-    typeof window !== "undefined" ? window.innerWidth >= 1280 : false,
+  const {
+    contacts,
+    filteredContacts,
+    activeKey,
+    activeContact,
+    activeMessages,
+    currentUserId,
+    messagesLoading,
+    threadsLoading,
+    isSending,
+    sendError,
+    websocketState,
+    uploadState,
+    searchTerm,
+    setSearchTerm,
+    setActiveKey,
+    sendMessage,
+    clearAttachment,
+    attachmentMetaById,
+  } = useMessageThreads(child);
+
+  const [mobileView, setMobileView] = useState<'list' | 'thread'>('list');
+  const [composerText, setComposerText] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const activeIndex = useMemo(
+    () => contacts.findIndex((contact) => contact.key === activeKey),
+    [contacts, activeKey]
   );
 
-  const currentMsg = threads[selectedIdx];
+  React.useEffect(() => {
+    if (activeIndex >= 0 && activeIndex !== activeThread) {
+      setActiveThread(activeIndex);
+    }
+  }, [activeIndex, activeThread, setActiveThread]);
+
+  React.useEffect(() => {
+    if (activeThread >= 0 && activeThread < contacts.length) {
+      const next = contacts[activeThread];
+      if (next && next.key !== activeKey) {
+        setActiveKey(next.key);
+      }
+    }
+  }, [activeThread, contacts, activeKey, setActiveKey]);
+
+  const statusLabel =
+    websocketState === 'connected'
+      ? 'Live'
+      : websocketState === 'connecting' || websocketState === 'reconnecting'
+        ? 'Connecting'
+        : 'Offline';
+
+  const handleSend = async () => {
+    const sent = await sendMessage({ text: composerText, file: selectedFile });
+    if (sent) {
+      setComposerText('');
+      setSelectedFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
 
   return (
-    <div className="flex h-full w-full bg-white overflow-hidden">
-      {/* Thread List Sidebar / Pane */}
-      <div
-        className={`w-full md:w-[280px] lg:w-[320px] shrink-0 border-r border-slate-100 flex flex-col bg-white ${mobileView === "list" ? "flex" : "hidden md:flex"}`}
-      >
-        <div className="p-5 border-b border-slate-100 bg-white">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold font-sans text-slate-900 tracking-tight">
-              Messages
-            </h2>
-            <span className="bg-[#3949AB] text-white text-[11px] font-bold px-3 py-1 rounded-full tracking-wide">
-              2 new
+    <div className="flex h-full w-full overflow-hidden bg-white">
+      <div className={`w-full md:w-[320px] shrink-0 border-r border-slate-100 flex-col ${mobileView === 'list' ? 'flex' : 'hidden md:flex'}`}>
+        <div className="border-b border-slate-100 p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-xl font-bold tracking-tight text-slate-900">Messages</h2>
+            <span className="rounded-full bg-[#3949AB] px-3 py-1 text-[11px] font-bold text-white">
+              {contacts.length}
             </span>
           </div>
           <div className="relative">
-            <Search
-              size={15}
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
-            />
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               placeholder="Search teachers..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 bg-slate-55 hover:bg-slate-100/50 focus:bg-white border border-slate-100/85 rounded-2xl text-xs sm:text-sm font-semibold text-slate-800 placeholder-slate-400 outline-none focus:outline-none focus:ring-1 focus:ring-[#3949ab] transition-all"
+              onChange={(event) => setSearchTerm(event.target.value)}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm font-medium text-slate-800 outline-none transition focus:border-[#3949AB] focus:bg-white"
             />
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto divide-y divide-slate-100 select-none">
-          {filteredThreads.map((msg, i) => {
-            const actualIndex = threads.findIndex((t) => t.id === msg.id);
-            const isActive = selectedIdx === actualIndex;
+        <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+          {filteredContacts.map((contact) => {
+            const isActive = contact.key === activeKey;
             return (
-              <div
-                key={msg.id}
+              <button
+                key={contact.key}
+                type="button"
                 onClick={() => {
-                  setSelectedIdx(actualIndex);
-                  setActiveThread(actualIndex);
-                  setMobileView("thread");
+                  setActiveKey(contact.key);
+                  setMobileView('thread');
                 }}
-                className={`py-4.5 px-5 cursor-pointer hover:bg-slate-50 transition-all flex items-start gap-3.5 relative ${isActive ? "bg-[#f4f6fc]/55 border-l-[3.5px] border-[#3949ab]" : "bg-white"}`}
+                className={`flex w-full items-start gap-3 px-5 py-4 text-left transition hover:bg-slate-50 ${isActive ? 'border-l-[3px] border-[#3949AB] bg-[#f4f6fc]' : ''}`}
               >
-                {/* Avatar */}
-                <div
-                  className={`w-11 h-11 rounded-full ${msg.avatarBg} text-white flex items-center justify-center text-sm font-bold shadow-xs shrink-0 tracking-wide`}
-                >
-                  {msg.teacherInitials}
+                <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${contact.avatarBg}`}>
+                  {contact.teacherInitials}
                 </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-0.5 gap-1.5">
-                    <h4 className="text-sm font-bold text-slate-900 truncate tracking-tight">
-                      {msg.teacherName}
-                    </h4>
-                    <span className="text-[10px] font-bold text-slate-400 shrink-0">
-                      {msg.time}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="truncate text-sm font-bold text-slate-900">{contact.teacherName}</p>
+                    <span className="shrink-0 text-[10px] font-semibold text-slate-400">
+                      {formatTime(contact.updatedAt)}
                     </span>
                   </div>
-
-                  {/* Student upper pill string */}
-                  <p className="text-[10px] font-black tracking-wider text-indigo-600/90 gap-1 flex items-center uppercase mb-0.5">
-                    <User size={10} className="stroke-[3]" /> {msg.studentName}
+                  <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-indigo-600">
+                    {contact.subjectName}
                   </p>
-
-                  <p className="text-xs text-slate-550 font-medium truncate tracking-tight">
-                    {msg.preview}
-                  </p>
+                  <p className="truncate text-xs font-medium text-slate-500">{contact.latestPreview}</p>
                 </div>
-
-                {/* Right status icon */}
-                <div className="shrink-0 self-center pl-1.5">
-                  {msg.unread ? (
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#3949ab] shadow-xs" />
-                  ) : (
-                    <CheckCheck
-                      size={14}
-                      className="text-emerald-500 stroke-[2.5]"
-                    />
-                  )}
-                </div>
-              </div>
+                {contact.unreadCount > 0 && (
+                  <span className="mt-1 rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                    {contact.unreadCount}
+                  </span>
+                )}
+              </button>
             );
           })}
 
-          {filteredThreads.length === 0 && (
-            <div className="p-8 text-center text-slate-400 text-xs italic">
-              No matching conversations found
+          {!threadsLoading && filteredContacts.length === 0 && (
+            <div className="p-8 text-center text-sm text-slate-400">
+              No teacher conversations match your search.
             </div>
           )}
         </div>
       </div>
 
-      {/* Middle Chat Panel */}
-      <div
-        className={`flex-1 flex flex-col bg-[#FAF9F6]/40 h-full relative ${mobileView === "thread" ? "flex" : "hidden md:flex"}`}
-      >
-        <div className="p-4.5 sm:p-5 bg-white border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <button
-              onClick={() => setMobileView("list")}
-              className="md:hidden p-2 -ml-2 text-[#3949ab] hover:bg-slate-100 rounded-xl mr-0.5 border-none bg-transparent"
-            >
-              <ChevronLeft size={20} strokeWidth={2.5} />
-            </button>
-            <div
-              className={`w-11 h-11 rounded-full ${currentMsg?.avatarBg || "bg-blue-100"} text-white flex items-center justify-center text-sm font-bold shadow-xs shrink-0`}
-            >
-              {currentMsg?.teacherInitials}
-            </div>
-            <div 
-              onClick={() => setShowRightSidebar(!showRightSidebar)} 
-              className="min-w-0 cursor-pointer select-none hover:opacity-80 transition-opacity"
-            >
-              <h4 className="text-base font-bold text-slate-900 truncate leading-tight">
-                {currentMsg?.teacherName}
-              </h4>
-
-              {/* Subject capsule & detail class */}
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="bg-indigo-50/70 text-[#3949ab] text-[10px] text-xs font-black tracking-wide px-2 py-0.5 rounded-md border border-indigo-100/30">
-                  {currentMsg?.subject}
-                </span>
-                <span className="text-[11px] font-bold text-slate-405">·</span>
-                <span className="text-[11px] font-bold text-slate-505">
-                  {currentMsg?.gradeLabel}
-                </span>
+      <div className={`flex-1 flex-col ${mobileView === 'thread' ? 'flex' : 'hidden md:flex'}`}>
+        {activeContact ? (
+          <>
+            <div className="flex items-center justify-between border-b border-slate-100 bg-white p-5">
+              <div className="flex min-w-0 items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setMobileView('list')}
+                  className="rounded-xl p-2 text-[#3949AB] md:hidden"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <div className={`flex h-11 w-11 items-center justify-center rounded-full text-sm font-bold text-white ${activeContact.avatarBg}`}>
+                  {activeContact.teacherInitials}
+                </div>
+                <div className="min-w-0">
+                  <h3 className="truncate text-base font-bold text-slate-900">{activeContact.teacherName}</h3>
+                  <div className="mt-1 flex items-center gap-2 text-xs font-semibold text-slate-500">
+                    <span>{activeContact.subjectName}</span>
+                    <span>·</span>
+                    <span>{activeContact.gradeLabel}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-500">
+                {websocketState === 'connected' ? <Wifi size={14} /> : <WifiOff size={14} />}
+                <span>{statusLabel}</span>
               </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2">
-            <button className="w-10 h-10 rounded-full border border-slate-205 hover:border-slate-300 hover:bg-slate-50 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-all cursor-pointer bg-transparent border-none">
-              <Phone size={15} strokeWidth={2.2} />
-            </button>
-            <button
-              onClick={() => setShowRightSidebar(!showRightSidebar)}
-              className="w-10 h-10 rounded-full border border-slate-205 hover:border-slate-300 hover:bg-slate-50 flex items-center justify-center text-slate-500 hover:text-slate-808 transition-all cursor-pointer bg-transparent border-none"
-            >
-              <MoreVertical size={15} strokeWidth={2.2} />
-            </button>
-          </div>
-        </div>
+            <div className="flex-1 overflow-y-auto bg-slate-50/70 p-5">
+              {!activeContact.existingThreadId && activeMessages.length === 0 && (
+                <div className="mb-4 rounded-2xl border border-indigo-100 bg-indigo-50 p-4 text-sm text-indigo-700">
+                  This conversation will be created when you send the first message.
+                </div>
+              )}
 
-        {/* Chat Threads Box */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-6 relative bg-slate-50/15">
-          {currentMsg?.thread.map((block, blockIdx) => (
-            <div key={blockIdx} className="space-y-5">
-              {/* Centered Date Separator */}
-              <div className="flex items-center justify-center">
-                <span className="bg-slate-100/75 border border-slate-200/20 text-[#3949ab]/90 text-[10px] sm:text-[11px] font-black tracking-widest uppercase px-3.5 py-1 rounded-full">
-                  {block.dateGroup}
-                </span>
-              </div>
+              {messagesLoading && (
+                <div className="text-sm text-slate-400">Loading messages...</div>
+              )}
 
-              {/* Messages Inside block group */}
-              {block.messages.map((chat, chatIdx) => {
-                const isTeacher = chat.sender === "teacher";
-                return (
-                  <div
-                    key={chatIdx}
-                    className={`flex ${isTeacher ? "justify-start" : "justify-end"}`}
-                  >
-                    <div
-                      className={`flex items-end gap-2.5 max-w-[85%] ${isTeacher ? "flex-row" : "flex-row-reverse"}`}
-                    >
-                      {/* Small Teacher Avatar indicator beside bubble */}
-                      {isTeacher && (
-                        <div
-                          className={`w-7 h-7 rounded-full ${currentMsg.avatarBg} text-white flex items-center justify-center font-bold text-[9px] shrink-0 shadow-xs mb-1.5`}
-                        >
-                          {currentMsg.teacherInitials}
-                        </div>
-                      )}
+              {!messagesLoading && activeMessages.length === 0 && (
+                <div className="flex h-full items-center justify-center">
+                  <div className="max-w-md text-center">
+                    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-50 text-[#3949AB]">
+                      <User size={22} className="stroke-[2.5]" />
+                    </div>
+                    <h3 className="text-base font-bold text-slate-900">No messages yet</h3>
+                    <p className="mt-2 text-sm font-medium text-slate-500">
+                      Start the conversation with {activeContact.teacherName}.
+                    </p>
+                  </div>
+                </div>
+              )}
 
-                      <div
-                        className={`space-y-1 ${isTeacher ? "items-start" : "items-end"}`}
-                      >
-                        <div
-                          className={`px-4.5 py-3 rounded-2xl text-sm leading-relaxed font-semibold transition-all shadow-2xs ${
-                            isTeacher
-                              ? "bg-slate-100/75 text-slate-800 rounded-bl-none border border-slate-200/30"
-                              : "bg-[#3949ab] text-white rounded-br-none"
-                          }`}
-                        >
-                          {chat.text}
-                        </div>
+              <div className="space-y-4">
+                {activeMessages.map((message) => {
+                  const isOwn = message.sender_id === currentUserId;
+                  const attachment = message.attachment ? attachmentMetaById[message.attachment] : null;
+                  const seen = !isOwn
+                    ? false
+                    : message.read_by_ids.some((readerId) => readerId !== currentUserId);
 
-                        {/* Bubble Footer status info */}
-                        <div className="flex items-center gap-1.5 px-1.5">
-                          <span className="text-[10px] text-slate-400 font-bold">
-                            {chat.time}
-                          </span>
-                          {!isTeacher && (
-                            <span className="flex items-center text-emerald-500">
-                              <CheckCheck size={11} strokeWidth={2.5} />
-                            </span>
-                          )}
+                  return (
+                    <div key={message.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[85%] rounded-2xl px-4 py-3 shadow-sm ${isOwn ? 'bg-[#3949AB] text-white' : 'bg-white text-slate-900'}`}>
+                        {message.text && <p className="whitespace-pre-wrap text-sm">{message.text}</p>}
+                        {attachment && (
+                          <a
+                            href={attachment.download_url ?? '#'}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={`mt-3 block rounded-xl border px-3 py-2 text-sm ${isOwn ? 'border-white/20 bg-white/10 text-white' : 'border-slate-200 bg-slate-50 text-slate-800'}`}
+                          >
+                            <p className="truncate font-semibold">{attachment.file_name}</p>
+                            <p className={`mt-1 text-xs ${isOwn ? 'text-white/70' : 'text-slate-500'}`}>
+                              {attachment.content_type}
+                            </p>
+                          </a>
+                        )}
+                        <div className={`mt-2 flex items-center justify-end gap-2 text-[11px] ${isOwn ? 'text-white/75' : 'text-slate-400'}`}>
+                          <span>{formatTime(message.created_at)}</span>
+                          {seen && <span>Seen</span>}
                         </div>
                       </div>
                     </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 bg-white p-4">
+              {(selectedFile || uploadState.file) && (
+                <div className="mb-3 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-800">
+                      {(selectedFile ?? uploadState.file)?.name}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {uploadState.progressLabel ?? 'Ready to upload'}
+                    </p>
                   </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedFile(null);
+                      clearAttachment();
+                      if (fileInputRef.current) fileInputRef.current.value = '';
+                    }}
+                    className="rounded-full p-1 text-slate-400 hover:bg-slate-200"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
 
-        {/* Message Input reply section */}
-        <form
-          onSubmit={handleSend}
-          className="p-4 bg-white border-t border-slate-100 flex items-center gap-3"
-        >
-          <div className="flex-1 flex items-center gap-2 bg-[#FAF9F6] border border-slate-200/50 hover:border-slate-305 px-4 py-2.5 rounded-2xl focus-within:bg-white focus-within:ring-2 focus-within:ring-[#3949ab]/15 transition-all">
-            <textarea
-              placeholder={`Reply to ${currentMsg?.teacherName}...`}
-              value={replyText}
-              onChange={(e) => setReplyText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              className="flex-1 bg-transparent border-none focus:outline-none focus:ring-0 text-sm font-semibold resize-none h-6 outline-none"
-            />
-            <button
-              type="submit"
-              className="bg-[#3949ab] text-white p-2.5 rounded-xl hover:scale-105 active:scale-95 transition-all shadow-xs border-none cursor-pointer flex items-center justify-center shrink-0"
-            >
-              <Send size={14} strokeWidth={2.5} />
-            </button>
-          </div>
-        </form>
-      </div>
+              {sendError && (
+                <div className="mb-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  {sendError}
+                </div>
+              )}
 
-      {/* Right Profiles / Info Pane backdrop for mobile */}
-      {showRightSidebar && (
-        <div
-          onClick={() => setShowRightSidebar(false)}
-          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 xl:hidden animate-fade-in"
-        />
-      )}
-
-      {/* Right Profiles / Info Pane */}
-      <div
-        className={`
-        w-[300px] border-l border-slate-100 p-6 pb-20 md:pb-6 overflow-y-auto flex-col bg-white shrink-0 transition-all duration-300
-        fixed top-0 bottom-16 md:bottom-0 right-0 z-50 shadow-2xl xl:shadow-none xl:static xl:flex
-        ${showRightSidebar ? "flex translate-x-0" : "hidden xl:flex"}
-      `}
-      >
-        <div className="flex flex-col items-center text-center w-full">
-          {/* Header with Title and Close button */}
-          <div className="flex items-center justify-between w-full mb-4">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
-              Teacher
-            </span>
-            <button
-              onClick={() => setShowRightSidebar(false)}
-              className="xl:hidden p-1.5 -mr-1.5 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer max-h-8 max-w-8 flex items-center justify-center border-none bg-transparent"
-              type="button"
-            >
-              <X size={18} strokeWidth={2.5} />
-            </button>
-          </div>
-
-          <div
-            className={`w-16 h-16 rounded-full ${currentMsg?.avatarBg} text-white flex items-center justify-center text-xl font-bold mb-3 shadow-md border-4 border-slate-50`}
-          >
-            {currentMsg?.teacherInitials}
-          </div>
-
-          <h3 className="text-base font-bold text-slate-900 leading-tight">
-            {currentMsg?.teacherName}
-          </h3>
-          <p className="text-xs text-slate-500 font-semibold mt-0.5">
-            {currentMsg?.subject} Teacher
-          </p>
-
-          {/* Grade Badge */}
-          <span className="inline-block mt-2.5 text-[11px] font-black text-[#3949ab]/90 bg-indigo-50/70 px-3 py-1 rounded-full uppercase tracking-wide border border-indigo-100/30">
-            {currentMsg?.gradeLabel}
-          </span>
-
-          <div className="w-full h-px bg-slate-100 my-5" />
-
-          {/* Contacts list */}
-          <div className="w-full space-y-3.5 text-left border-b border-slate-100 pb-5">
-            <div className="flex items-center gap-3 text-xs text-slate-700 font-semibold">
-              <Phone
-                size={14}
-                className="text-slate-400 shrink-0"
-                strokeWidth={2}
-              />
-              <span>{currentMsg?.phone}</span>
-            </div>
-            <div className="flex items-center gap-3 text-xs text-slate-700 font-semibold min-w-0">
-              <Mail
-                size={14}
-                className="text-slate-400 shrink-0"
-                strokeWidth={2}
-              />
-              <span className="truncate">{currentMsg?.email}</span>
-            </div>
-            <div className="flex items-center gap-3 text-xs text-slate-705 font-bold">
-              <Clock
-                size={14}
-                className="text-slate-400 shrink-0"
-                strokeWidth={2}
-              />
-              <span className="text-slate-550 font-bold">
-                {currentMsg?.focusStudent
-                  ? currentMsg.hours
-                  : "Available 9AM - 4PM"}
-              </span>
-            </div>
-          </div>
-
-          {/* Focus Child detailed breakdown panel */}
-          {currentMsg?.focusStudent && (
-            <div className="w-full text-left pt-5">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-4.5">
-                Focus Student
-              </span>
-
-              <div className="flex items-center gap-3 p-3 bg-slate-50/60 border border-slate-100/70 rounded-2xl">
-                <div
-                  className={`w-11 h-11 rounded-full ${currentMsg.focusStudent.avatarBg} text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-xs ring-2 ring-white`}
+              <div className="flex items-end gap-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null;
+                    setSelectedFile(file);
+                    if (!file) clearAttachment();
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200 text-slate-500 transition hover:bg-slate-50"
                 >
-                  {currentMsg.focusStudent.initials}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-slate-800 truncate">
-                    {currentMsg.focusStudent.name}
-                  </p>
-                  <p className="text-[10px] text-slate-400 font-bold">
-                    {currentMsg.focusStudent.id}
-                  </p>
-                  <span className="inline-block mt-1 text-[9px] font-extrabold text-[#3949ab] bg-indigo-50/70 border border-indigo-100/10 px-2 py-0.5 rounded-md uppercase">
-                    {currentMsg.focusStudent.grade}
-                  </span>
-                </div>
-              </div>
-
-              {/* Academic Snapshot progress display */}
-              <div className="my-5 space-y-3.5 pt-1">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-3 bg-white text-left">
-                  Academic Snapshot
-                </span>
-
-                {/* Overall Avg */}
-                <div>
-                  <div className="flex items-center justify-between text-[11px] font-bold">
-                    <span className="text-slate-400 font-bold tracking-tight uppercase">
-                      Overall Avg
-                    </span>
-                    <span className="text-amber-600 font-bold">
-                      {currentMsg.focusStudent.avg}
-                    </span>
-                  </div>
-                  <div className="w-full h-1.5 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
-                    <div
-                      className="h-full bg-amber-500 rounded-full transition-all duration-500"
-                      style={{ width: `${currentMsg.focusStudent.avgVal}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Tasks Done */}
-                <div>
-                  <div className="flex items-center justify-between text-[11px] font-bold">
-                    <span className="text-slate-400 font-bold tracking-tight uppercase">
-                      Tasks Done
-                    </span>
-                    <span className="text-[#3949ab] font-black">
-                      {currentMsg.focusStudent.tasks}
-                    </span>
-                  </div>
-                  <div className="w-full h-1.5 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
-                    <div
-                      className="h-full bg-[#3949ab] rounded-full transition-all duration-500"
-                      style={{ width: `${currentMsg.focusStudent.tasksVal}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Engagement */}
-                <div>
-                  <div className="flex items-center justify-between text-[11px] font-bold">
-                    <span className="text-slate-400 font-bold tracking-tight uppercase">
-                      Engagement
-                    </span>
-                    <span className="text-emerald-600 font-black">
-                      {currentMsg.focusStudent.engagement}
-                    </span>
-                  </div>
-                  <div className="w-full h-1.5 bg-slate-100 rounded-full mt-1.5 overflow-hidden">
-                    <div
-                      className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                      style={{
-                        width: `${currentMsg.focusStudent.engagementVal}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Recent Homework scores panel */}
-              <div className="pt-2">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-3">
-                  Recent Homework
-                </span>
-                <div className="space-y-2">
-                  {currentMsg.focusStudent.homework.map((hw, hwIdx) => (
-                    <div
-                      key={hwIdx}
-                      className="flex items-center justify-between py-1 border-b border-dashed border-slate-100/50 text-xs"
-                    >
-                      <span className="text-slate-550 font-semibold truncate max-w-[150px]">
-                        {hw.title}
-                      </span>
-                      <span
-                        className={`text-[11px] font-black px-2 py-0.5 rounded-md ${hw.color}`}
-                      >
-                        {hw.score}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                  <Paperclip size={18} />
+                </button>
+                <textarea
+                  rows={1}
+                  value={composerText}
+                  onChange={(event) => setComposerText(event.target.value)}
+                  placeholder="Type your message..."
+                  className="max-h-32 min-h-[44px] flex-1 resize-y rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-[#3949AB]"
+                />
+                <button
+                  type="button"
+                  onClick={handleSend}
+                  disabled={isSending || uploadState.status === 'uploading'}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#3949AB] text-white transition hover:bg-[#2f3d93] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Send size={18} />
+                </button>
               </div>
             </div>
-          )}
-        </div>
+          </>
+        ) : (
+          <div className="flex h-full items-center justify-center bg-slate-50/60 p-6 text-center">
+            <div>
+              <h3 className="text-base font-bold text-slate-900">No teachers found</h3>
+              <p className="mt-2 text-sm text-slate-500">
+                No teacher assignments are available for this student yet.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, User, MessageSquare } from 'lucide-react';
 
 import { Card } from '@/components/ui';
-import { Child, Subject } from '@/types';
+import { useAssignments, useGrades } from '@/hooks';
+import { AssignmentEntry, Child, Subject } from '@/types';
 import { getGradeLetter, getGradeBg } from '@/lib/utils';
 
 export interface GradesModuleProps {
@@ -17,6 +18,13 @@ export const GradesModule = ({
 }: GradesModuleProps) => {
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const {
+    data: grades,
+    isLoading,
+    isError,
+    error,
+  } = useGrades(child.id);
+  const { data: assignments = [] } = useAssignments(child);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -36,10 +44,69 @@ export const GradesModule = ({
     };
   }, [selectedSubject]);
 
+  const subjects = grades?.subjects ?? [];
+
+  const renderAssignmentStatus = (assignment: AssignmentEntry) => {
+    if (assignment.status === "graded") {
+      const scoreVal = assignment.score ?? 0;
+      return (
+        <span
+          className={`px-2 py-0.5 rounded-full text-[9px] font-black ${getGradeBg((scoreVal / assignment.maxScore) * 100)}`}
+        >
+          {getGradeLetter((scoreVal / assignment.maxScore) * 100)}{" "}
+          • {((scoreVal / assignment.maxScore) * 100).toFixed(0)}%
+        </span>
+      );
+    }
+    if (assignment.status === "submitted") {
+      return (
+        <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-50 text-amber-600 border border-amber-100/50">
+          PENDING
+        </span>
+      );
+    }
+    if (assignment.status === "missing") {
+      return (
+        <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-rose-50 text-rose-600 border border-rose-100/50">
+          MISSING
+        </span>
+      );
+    }
+    return (
+      <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-blue-50 text-blue-600 border border-blue-100/50">
+        UPCOMING
+      </span>
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <div className="rounded-xl border border-slate-100 bg-white p-4 text-sm font-medium text-slate-500">
+        Loading grades...
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="rounded-xl border border-red-100 bg-red-50 p-4 text-sm font-medium text-red-700">
+        {error?.message ?? 'Failed to load grades.'}
+      </div>
+    );
+  }
+
+  if (subjects.length === 0) {
+    return (
+      <div className="rounded-xl border border-slate-100 bg-white p-6 text-center text-sm font-medium text-slate-500">
+        No grade records are available for this student yet.
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       <div className="space-y-3 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-4 md:space-y-0">
-        {child.subjects.map((sub) => {
+        {subjects.map((sub) => {
           return (
             <div
               key={sub.name}
@@ -59,7 +126,7 @@ export const GradesModule = ({
                           {sub.name}
                         </h3>
                         <p className="text-[10px] text-slate-400 font-bold truncate">
-                          {sub.teacher}
+                          {sub.teacher || 'Teacher unavailable'}
                         </p>
                       </div>
                     </div>
@@ -133,7 +200,7 @@ export const GradesModule = ({
         {selectedSubject &&
           (() => {
             const sub = selectedSubject;
-            const subjectActivities = child.assignments.filter(
+            const subjectActivities = assignments.filter(
               (a) => a.subject === sub.name,
             );
             const gradedNews = subjectActivities.filter(
@@ -192,7 +259,7 @@ export const GradesModule = ({
                         <div className="flex items-center gap-1 mt-0.5 text-slate-500">
                           <User size={11} className="shrink-0" />
                           <p className="text-[11px] font-semibold truncate">
-                            Teacher: {sub.teacher}
+                            Teacher: {sub.teacher || 'Teacher unavailable'}
                           </p>
                         </div>
                       </div>
@@ -243,39 +310,7 @@ export const GradesModule = ({
                     {subjectActivities.length > 0 ? (
                       <div className="space-y-2.5 pb-4">
                         {subjectActivities.map((act) => {
-                          let statusBadge = null;
-                          if (act.status === "graded") {
-                            const scoreVal = act.score ?? 0;
-                            statusBadge = (
-                              <span
-                                className={`px-2 py-0.5 rounded-full text-[9px] font-black ${getGradeBg((scoreVal / act.maxScore) * 100)}`}
-                              >
-                                {getGradeLetter(
-                                  (scoreVal / act.maxScore) * 100,
-                                )}{" "}
-                                •{" "}
-                                {((scoreVal / act.maxScore) * 100).toFixed(0)}%
-                              </span>
-                            );
-                          } else if (act.status === "submitted") {
-                            statusBadge = (
-                              <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-50 text-amber-600 border border-amber-100/50">
-                                PENDING
-                              </span>
-                            );
-                          } else if (act.status === "missing") {
-                            statusBadge = (
-                              <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-rose-50 text-rose-600 border border-rose-100/50">
-                                MISSING
-                              </span>
-                            );
-                          } else {
-                            statusBadge = (
-                              <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-blue-50 text-blue-600 border border-blue-100/50">
-                                UPCOMING
-                              </span>
-                            );
-                          }
+                          const statusBadge = renderAssignmentStatus(act);
 
                           return (
                             <div
@@ -344,7 +379,7 @@ export const GradesModule = ({
                         className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-[#3949ab] hover:bg-[#12185c] active:scale-[0.98] transition-all cursor-pointer shadow-md shadow-blue-900/10 border-none"
                       >
                         <MessageSquare size={13} />
-                        Send Message to {sub.teacher}
+                        Send Message to {sub.teacher || 'Teacher'}
                       </button>
                     </div>
                   )}

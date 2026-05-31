@@ -12,12 +12,21 @@ export async function getChildren(): Promise<Child[]> {
     apiClient.get<Array<{ student: string; attendance_rate: number }>>('/api/attendance-summaries/'),
   ]);
 
+  const summaries = Array.isArray(summariesRes.data)
+    ? summariesRes.data
+    : Array.isArray((summariesRes.data as { data?: unknown })?.data)
+      ? ((summariesRes.data as { data: Array<{ student: string; attendance_rate: number }> }).data)
+      : [];
+
   const attendanceByStudent = new Map(
-    summariesRes.data.map((s) => [s.student, s.attendance_rate] as const)
+    summaries.map((s) => [s.student, s.attendance_rate] as const)
   );
 
   return studentsRes.map((s) => ({
     id: s.id,
+    branchId: s.branch,
+    branchName: s.branch_name,
+    sectionId: s.current_section,
     name: `${s.first_name} ${s.last_name}`.trim(),
     initials: toInitials(s.first_name, s.last_name),
     grade: s.grade_name,

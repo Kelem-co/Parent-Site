@@ -27,12 +27,20 @@ export async function verifyOtp(credentials: OtpVerifyRequest): Promise<AuthResp
 }
 
 export async function requestOtp(phone_number: OtpRequest['phone_number']): Promise<{ message: string }> {
-  const res = await apiClient.post<{ message: string }>('/auth/otp/request/', { phone_number });
+  const res = await apiClient.post<{ message: string }>(
+    '/auth/otp/request/',
+    { phone_number },
+    { withCredentials: false }
+  );
   return res.data;
 }
 
 export async function completeParentInvitation(payload: CompleteInvitationRequest): Promise<{ message: string }> {
-  const res = await apiClient.post<{ message: string }>('/api/parents/complete-invitation/', payload);
+  const res = await apiClient.post<{ message: string }>(
+    '/api/parents/complete-invitation/',
+    payload,
+    { withCredentials: false }
+  );
   return res.data;
 }
 

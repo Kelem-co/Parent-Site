@@ -1,6 +1,5 @@
 import React from 'react';
 import { 
-  Check, 
   Star, 
   ClipboardList, 
   MessageCircle, 
@@ -10,14 +9,14 @@ import {
   FileSpreadsheet, 
   Download, 
   Eye, 
-  Calendar 
+  Calendar,
+  X,
 } from 'lucide-react';
 
 import { Card, Badge, SectionLabel } from '@/components/ui';
-import { useHomeworkConfirmation } from '@/hooks';
-import { Child } from '@/types';
+import { useConfirmHomework, useTodaysHomework } from '@/hooks';
+import { Child, TodaysHomeworkEntry } from '@/types';
 import { getGradeColor, getGradeLetter } from '@/lib/utils';
-import { HOMEWORK_MAP } from '@/lib/mockData';
 
 export interface OverviewModuleProps {
   child: Child;
@@ -30,14 +29,27 @@ export const OverviewModule = ({
   setActiveModule,
   onOpenPlanner,
 }: OverviewModuleProps) => {
+  const [selectedHomework, setSelectedHomework] =
+    React.useState<TodaysHomeworkEntry | null>(null);
+
   // Compute absences count
   const absentCount = child.attendance_log.filter(
     (l) => l.status === "absent",
   ).length;
 
-  const { isConfirmed, handleConfirm, resetConfirmation } = useHomeworkConfirmation(child.id);
-
-  const currentHomework = HOMEWORK_MAP[child.id] || HOMEWORK_MAP["STU-00421"];
+  const {
+    data: todaysHomework = [],
+    isLoading: isHomeworkLoading,
+    isError: isHomeworkError,
+    error: homeworkError,
+  } = useTodaysHomework(child.id);
+  const confirmHomeworkMutation = useConfirmHomework(child.id);
+  const todayLabel = new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date());
 
   const getIconComponent = (iconName: string) => {
     switch (iconName) {
@@ -60,62 +72,139 @@ export const OverviewModule = ({
     }
   };
 
+  const formatDueDate = (value: string) =>
+    new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    }).format(new Date(value));
+
+  const getHomeworkBadgeVariant = (entry: {
+    confirmed: boolean;
+    status?: string;
+  }) => {
+    if (entry.confirmed) return 'emerald';
+    if (entry.status === 'missing') return 'red';
+    return 'amber';
+  };
+
+  const getHomeworkBadgeText = (entry: {
+    confirmed: boolean;
+    status?: string;
+  }) => {
+    if (entry.confirmed) return 'Confirmed';
+    if (entry.status === 'missing') return 'Missing';
+    return 'Pending';
+  };
+
+  const isConfirmingHomework = (assessmentId: string, studentId: string) =>
+    confirmHomeworkMutation.isPending
+    && confirmHomeworkMutation.variables?.assessment === assessmentId
+    && confirmHomeworkMutation.variables?.student === studentId;
+
+  React.useEffect(() => {
+    if (!selectedHomework) {
+      return;
+    }
+
+    const updatedHomework = todaysHomework.find(
+      (entry) =>
+        entry.id === selectedHomework.id
+        && entry.studentId === selectedHomework.studentId,
+    );
+
+    if (!updatedHomework) {
+      setSelectedHomework(null);
+      return;
+    }
+
+    if (updatedHomework !== selectedHomework) {
+      setSelectedHomework(updatedHomework);
+    }
+  }, [selectedHomework, todaysHomework]);
+
+  React.useEffect(() => {
+    if (!selectedHomework) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSelectedHomework(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedHomework]);
+
+  const selectedHomeworkIsConfirmed = selectedHomework
+    ? selectedHomework.confirmed
+      || selectedHomework.homeworkConfirmation?.is_confirmed
+    : false;
+  const selectedHomeworkIsPending = selectedHomework
+    ? isConfirmingHomework(selectedHomework.id, selectedHomework.studentId)
+    : false;
+
   return (
+    <>
     <div className="space-y-6">
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <p className="text-xs font-black uppercase tracking-widest text-slate-400">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+        <Card className="p-3 sm:p-4">
+          <p className="text-[10px] sm:text-xs font-black uppercase tracking-[0.18em] sm:tracking-widest text-slate-400">
             Overall Grade
           </p>
-          <div className="flex items-end gap-2 mt-1">
+          <div className="flex flex-col items-start gap-0.5 mt-1 sm:flex-row sm:items-end sm:gap-2">
             <h2
-              className={`text-2xl font-bold ${getGradeColor(child.overallAvg)}`}
+              className={`text-lg sm:text-2xl font-bold leading-none ${getGradeColor(child.overallAvg)}`}
             >
               {child.overallAvg}%
             </h2>
-            <p className="text-sm text-slate-400 mb-1">
+            <p className="text-[11px] sm:text-sm text-slate-400 sm:mb-1 leading-tight">
               {getGradeLetter(child.overallAvg)} Grade
             </p>
           </div>
         </Card>
-        <Card>
-          <p className="text-xs font-black uppercase tracking-widest text-slate-400">
+        <Card className="p-3 sm:p-4">
+          <p className="text-[10px] sm:text-xs font-black uppercase tracking-[0.18em] sm:tracking-widest text-slate-400">
             Attendance
           </p>
-          <div className="flex items-end gap-2 mt-1">
+          <div className="flex flex-col items-start gap-0.5 mt-1 sm:flex-row sm:items-end sm:gap-2">
             <h2
-              className={`text-2xl font-bold ${getGradeColor(child.attendance)}`}
+              className={`text-lg sm:text-2xl font-bold leading-none ${getGradeColor(child.attendance)}`}
             >
               {child.attendance}%
             </h2>
-            <p className="text-sm text-slate-400 mb-1">
+            <p className="text-[11px] sm:text-sm text-slate-400 sm:mb-1 leading-tight">
               {absentCount} absences this term
             </p>
           </div>
         </Card>
-        <Card>
-          <p className="text-xs font-black uppercase tracking-widest text-slate-400">
+        <Card className="p-3 sm:p-4">
+          <p className="text-[10px] sm:text-xs font-black uppercase tracking-[0.18em] sm:tracking-widest text-slate-400">
             Assignments Due
           </p>
-          <div className="flex items-end gap-2 mt-1">
-            <h2 className="text-2xl font-bold text-amber-600">
+          <div className="flex flex-col items-start gap-0.5 mt-1 sm:flex-row sm:items-end sm:gap-2">
+            <h2 className="text-lg sm:text-2xl font-bold leading-none text-amber-600">
               {child.assignmentsDue}
             </h2>
-            <p className="text-sm text-slate-400 mb-1">this week</p>
+            <p className="text-[11px] sm:text-sm text-slate-400 sm:mb-1 leading-tight">this week</p>
           </div>
         </Card>
-        <Card>
-          <p className="text-xs font-black uppercase tracking-widest text-slate-400">
+        <Card className="p-3 sm:p-4">
+          <p className="text-[10px] sm:text-xs font-black uppercase tracking-[0.18em] sm:tracking-widest text-slate-400">
             Missing Work
           </p>
-          <div className="flex items-end gap-2 mt-1">
+          <div className="flex flex-col items-start gap-0.5 mt-1 sm:flex-row sm:items-end sm:gap-2">
             <h2
-              className={`text-2xl font-bold ${child.missingWork > 0 ? "text-red-600" : "text-emerald-600"}`}
+              className={`text-lg sm:text-2xl font-bold leading-none ${child.missingWork > 0 ? "text-red-600" : "text-emerald-600"}`}
             >
               {child.missingWork}
             </h2>
-            <p className="text-sm text-slate-400 mb-1">
+            <p className="text-[11px] sm:text-sm text-slate-400 sm:mb-1 leading-tight">
               {child.missingWork === 0 ? "All caught up" : "needs attention"}
             </p>
           </div>
@@ -137,77 +226,105 @@ export const OverviewModule = ({
               <div className="flex items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50/60 text-indigo-700">
                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                  Tuesday, May 26, 2026
+                  {todayLabel}
                 </span>
-                {isConfirmed ? (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-150 uppercase tracking-wide">
-                    Reviewed
-                  </span>
-                ) : (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-600 border border-amber-150 uppercase tracking-wide">
-                    Pending
-                  </span>
-                )}
               </div>
             </div>
 
             <div className="space-y-3.5 my-4">
-              {currentHomework.map((hw, idx) => (
-                <div key={idx} className="flex items-start gap-3 p-3 bg-slate-50/50 hover:bg-slate-50 rounded-xl border border-slate-100/30 transition-colors">
-                  <div
-                    className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0"
-                    style={{ backgroundColor: hw.color }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-semibold text-slate-800 leading-snug">
-                      {hw.title}
-                    </h4>
-                    <p className="text-xs text-slate-500 mt-1">
-                      <span className="font-semibold text-slate-700">{hw.subject}</span>
-                      <span className="mx-1.5 text-slate-300">•</span>
-                      <span>{hw.type}</span>
-                      <span className="mx-1.5 text-slate-300">•</span>
-                      <span className="text-slate-400 font-medium">{hw.dueDate}</span>
-                    </p>
-                  </div>
-                  <div className="shrink-0">
-                    <Badge variant={hw.statusVariant}>
-                      {hw.status}
-                    </Badge>
-                  </div>
+              {isHomeworkLoading && (
+                <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4 text-sm font-medium text-slate-500">
+                  Loading today's homework...
                 </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-col items-center gap-2">
-            <button
-              disabled={isConfirmed}
-              onClick={handleConfirm}
-              className={`w-full py-3 px-4 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 border cursor-pointer border-none ${
-                isConfirmed
-                  ? "bg-emerald-600 text-white cursor-default"
-                  : "bg-[#3949ab] hover:bg-[#32409a] text-white active:scale-[0.99]"
-              }`}
-            >
-              {isConfirmed ? (
-                <>
-                  <Check size={16} strokeWidth={3} />
-                  <span>Confirmed ✓</span>
-                </>
-              ) : (
-                <span>I have reviewed today's homework</span>
               )}
-            </button>
-            {isConfirmed && (
-              <button
-                id="reset-homework-conf"
-                onClick={() => resetConfirmation()}
-                className="text-xs text-slate-400 hover:text-slate-650 underline cursor-pointer mt-1 transition-colors"
-              >
-                Reset status (for testing)
-              </button>
-            )}
+              {isHomeworkError && (
+                <div className="rounded-xl border border-red-100 bg-red-50/70 p-4 text-sm font-medium text-red-700">
+                  {homeworkError?.message ?? "Failed to load today's homework."}
+                </div>
+              )}
+              {!isHomeworkLoading && !isHomeworkError && todaysHomework.length === 0 && (
+                <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4 text-sm font-medium text-slate-500">
+                  No homework due today.
+                </div>
+              )}
+              {!isHomeworkLoading && !isHomeworkError && todaysHomework.map((hw) => {
+                const isConfirmed = hw.confirmed || hw.homeworkConfirmation?.is_confirmed;
+                const isPending = isConfirmingHomework(hw.id, hw.studentId);
+                return (
+                  <div
+                    key={hw.id}
+                    className="flex items-start gap-3 p-3 bg-slate-50/50 hover:bg-slate-50 rounded-xl border border-slate-100/30 transition-colors cursor-pointer"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedHomework(hw)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        setSelectedHomework(hw);
+                      }
+                    }}
+                  >
+                    <div
+                      className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 bg-[#3949ab]"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-semibold text-slate-800 leading-snug">
+                            {hw.title}
+                          </h4>
+                          <p className="text-xs text-slate-500 mt-1">
+                            <span className="font-semibold text-slate-700">{hw.subject}</span>
+                            <span className="mx-1.5 text-slate-300">•</span>
+                            <span>Homework</span>
+                            <span className="mx-1.5 text-slate-300">•</span>
+                            <span className="text-slate-400 font-medium">
+                              Due {formatDueDate(hw.dueDate)}
+                            </span>
+                          </p>
+                        </div>
+                        <div className="shrink-0">
+                          <Badge variant={getHomeworkBadgeVariant({
+                            confirmed: isConfirmed,
+                          })}>
+                            {getHomeworkBadgeText({
+                              confirmed: isConfirmed,
+                            })}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <p className="text-xs text-slate-400 truncate">
+                          {hw.section}
+                        </p>
+                        <button
+                          type="button"
+                          disabled={isConfirmed || isPending}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (isConfirmed || isPending) return;
+                            confirmHomeworkMutation.mutate({
+                              assessment: hw.id,
+                              student: hw.studentId,
+                              is_confirmed: true,
+                            });
+                          }}
+                          className={`rounded-lg px-3 py-2 text-xs font-bold transition-all border-none ${
+                            isConfirmed
+                              ? 'bg-emerald-600 text-white cursor-default'
+                              : isPending
+                                ? 'bg-slate-200 text-slate-500 cursor-wait'
+                                : 'bg-[#3949ab] hover:bg-[#32409a] text-white cursor-pointer'
+                          }`}
+                        >
+                          {isConfirmed ? 'Confirmed' : isPending ? 'Confirming...' : 'Confirm'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -402,5 +519,134 @@ export const OverviewModule = ({
         </Card>
       </div>
     </div>
+
+    {selectedHomework && (
+      <div className="fixed inset-0 z-[220] bg-slate-900/45 backdrop-blur-xs flex items-end sm:items-center justify-center">
+        <button
+          type="button"
+          aria-label="Close homework details"
+          onClick={() => setSelectedHomework(null)}
+          className="absolute inset-0 cursor-default"
+        />
+        <div className="relative z-10 w-full sm:max-w-lg bg-slate-50 rounded-t-[1.75rem] sm:rounded-3xl border border-slate-200/80 shadow-2xl overflow-hidden max-h-[92vh] sm:max-h-[88vh]">
+          <div className="bg-white px-4 py-4 sm:px-6 sm:py-5 border-b border-slate-200/70">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-[0.18em] bg-indigo-50 text-indigo-700">
+                  Homework Details
+                </span>
+                <h3 className="text-base sm:text-lg font-black text-slate-900 mt-3 leading-tight">
+                  {selectedHomework.title}
+                </h3>
+                <p className="text-[11px] sm:text-xs text-slate-500 font-semibold mt-1">
+                  {selectedHomework.subject}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedHomework(null)}
+                className="p-2 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 transition-colors border-none cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-y-auto px-4 py-4 sm:px-6 sm:py-5 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <Badge variant={getHomeworkBadgeVariant({ confirmed: selectedHomeworkIsConfirmed })}>
+                {getHomeworkBadgeText({ confirmed: selectedHomeworkIsConfirmed })}
+              </Badge>
+              <p className="text-[11px] font-semibold text-slate-400">
+                Due {formatDueDate(selectedHomework.dueDate)}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-slate-200/70 bg-white p-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                  Section
+                </p>
+                <p className="text-sm font-semibold text-slate-800 mt-2">
+                  {selectedHomework.section}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200/70 bg-white p-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                  Student
+                </p>
+                <p className="text-sm font-semibold text-slate-800 mt-2">
+                  {selectedHomework.studentName}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200/70 bg-white p-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                  Roll No
+                </p>
+                <p className="text-sm font-semibold text-slate-800 mt-2">
+                  {selectedHomework.studentRollNo || 'Not available'}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200/70 bg-white p-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                Description
+              </p>
+              <p className="text-sm leading-6 text-slate-700 mt-3">
+                {selectedHomework.description?.trim() || 'No description provided.'}
+              </p>
+            </div>
+
+            {selectedHomework.homeworkConfirmation?.feedback && (
+              <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/70 p-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
+                  Parent Feedback
+                </p>
+                <p className="text-sm leading-6 text-emerald-900 mt-3">
+                  {selectedHomework.homeworkConfirmation.feedback}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white px-4 py-4 sm:px-6 border-t border-slate-200/70 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setSelectedHomework(null)}
+              className="rounded-xl px-4 py-2.5 text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors border-none cursor-pointer"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              disabled={selectedHomeworkIsConfirmed || selectedHomeworkIsPending}
+              onClick={() => {
+                if (selectedHomeworkIsConfirmed || selectedHomeworkIsPending) return;
+                confirmHomeworkMutation.mutate({
+                  assessment: selectedHomework.id,
+                  student: selectedHomework.studentId,
+                  is_confirmed: true,
+                });
+              }}
+              className={`rounded-xl px-4 py-2.5 text-sm font-bold transition-all border-none ${
+                selectedHomeworkIsConfirmed
+                  ? 'bg-emerald-600 text-white cursor-default'
+                  : selectedHomeworkIsPending
+                    ? 'bg-slate-200 text-slate-500 cursor-wait'
+                    : 'bg-[#3949ab] hover:bg-[#32409a] text-white cursor-pointer'
+              }`}
+            >
+              {selectedHomeworkIsConfirmed
+                ? 'Confirmed'
+                : selectedHomeworkIsPending
+                  ? 'Confirming...'
+                  : 'Confirm Homework'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 };

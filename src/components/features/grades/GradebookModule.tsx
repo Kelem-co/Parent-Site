@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Search, ChevronDown, X } from 'lucide-react';
 
 import { Card } from '@/components/ui';
-import { Child } from '@/types';
+import { useAssignments } from '@/hooks';
+import { AssignmentEntry, Child } from '@/types';
 import { getSubjectInitials, getGradeLetter, getGradeBg } from '@/lib/utils';
 
 export interface GradebookModuleProps {
@@ -14,142 +15,16 @@ export const GradebookModule = ({ child }: GradebookModuleProps) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [subjectFilter, setSubjectFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("All");
-  const [selectedTask, setSelectedTask] = useState<any | null>(null);
+  const [selectedTask, setSelectedTask] = useState<AssignmentEntry | null>(null);
+  const { data: assignments = [], isLoading, isError, error } = useAssignments(child);
 
   const tasks = useMemo(() => {
-    const list: any[] = [];
-
-    const sanitizeTitle = (title: string) => {
-      let t = title;
-      t = t.replace(/linear equations practice/gi, "Linear Equations Quiz");
-      t = t.replace(/newton's laws questions/gi, "Newton's Laws Quiz");
-      t = t.replace(/wwi causes discussion/gi, "WWI Foundations Quiz");
-      t = t.replace(/in-class problem solving/gi, "In-class Algebra Quiz");
-      t = t.replace(
-        /chapter 4 — algebra review/gi,
-        "Chapter 4 — Algebra Quiz Prep",
-      );
-      t = t.replace(
-        /chapter 3 summary — algebra/gi,
-        "Algebra Chapter 3 Assignment",
-      );
-
-      // Fallbacks in case of other names
-      t = t.replace(/homework/gi, "Assignment");
-      t = t.replace(/classwork/gi, "Quiz");
-      return t;
-    };
-
-    const determineType = (title: string, origType: string) => {
-      const lowerTitle = title.toLowerCase();
-      const lowerType = (origType || "").toLowerCase();
-
-      if (
-        lowerTitle.includes("exam") ||
-        lowerTitle.includes("mid-term") ||
-        lowerTitle.includes("test") ||
-        lowerType.includes("exam") ||
-        lowerType.includes("test")
-      ) {
-        return "Exam";
-      }
-      if (
-        lowerTitle.includes("quiz") ||
-        lowerTitle.includes("practice") ||
-        lowerTitle.includes("basics") ||
-        lowerType.includes("quiz") ||
-        lowerTitle.includes("prep") ||
-        lowerTitle.includes("solving")
-      ) {
-        return "Quiz";
-      }
-      return "Assignment";
-    };
-
-    const sanitizeId = (id: string, computedType: string) => {
-      if (id.startsWith("HW-")) {
-        const num = id.split("-")[1];
-        if (computedType === "Quiz") {
-          return `QZ-00${num}`;
-        }
-        return `ASN-00${num}`;
-      }
-      return id;
-    };
-
-    if (child.homework) {
-      child.homework.forEach((hw) => {
-        const cleanTitle = sanitizeTitle(hw.title);
-        const mappedType = determineType(cleanTitle, hw.type);
-        const cleanIdVal = sanitizeId(hw.id, mappedType);
-
-        list.push({
-          id: cleanIdVal,
-          title: cleanTitle,
-          subject: hw.subject,
-          subjectColor: hw.subjectColor || "#3949ab",
-          score: hw.score,
-          maxScore: hw.maxScore,
-          status: hw.status,
-          type: mappedType,
-          dueDate: hw.date || "—",
-        });
-      });
-    }
-
-    if (child.assignments) {
-      child.assignments.forEach((asn) => {
-        if (!list.some((item) => item.id === asn.id)) {
-          const cleanTitle = sanitizeTitle(asn.title);
-          const mappedType = determineType(cleanTitle, asn.type);
-          const cleanIdVal = sanitizeId(asn.id, mappedType);
-
-          list.push({
-            id: cleanIdVal,
-            title: cleanTitle,
-            subject: asn.subject,
-            subjectColor: asn.subjectColor || "#3949ab",
-            score: asn.score,
-            maxScore: asn.maxScore,
-            status: asn.status,
-            type: mappedType,
-            dueDate: asn.dueDate || "—",
-          });
-        }
-      });
-    }
-
-    // Add explicit Exam entries to guarantee beautiful coverage of exams
-    const isLiya = child.id === "STU-00421";
-    const examScore1 = isLiya ? 95 : 70;
-    const examScore2 = isLiya ? 85 : 65;
-
-    list.push({
-      id: "EXM-001",
-      title: "Mathematics Mid-Term Exam",
-      subject: "Mathematics",
-      subjectColor: "#3949ab",
-      score: Math.round(examScore1 * 0.2),
-      maxScore: 20,
-      status: "graded",
-      type: "Exam",
-      dueDate: "May 24, 2025",
-    });
-
-    list.push({
-      id: "EXM-002",
-      title: "Physics Semester Exam",
-      subject: "Physics",
-      subjectColor: "#7c3aed",
-      score: Math.round(examScore2 * 0.5),
-      maxScore: 50,
-      status: "graded",
-      type: "Exam",
-      dueDate: "May 15, 2025",
-    });
-
-    return list;
-  }, [child]);
+    return assignments.map((assignment) => ({
+      ...assignment,
+      dueDate: assignment.dueDate || "—",
+      type: assignment.taskTypeDisplay || assignment.type || "Assignment",
+    }));
+  }, [assignments]);
 
   const subjects = useMemo(() => {
     return ["All", ...Array.from(new Set(tasks.map((t) => t.subject)))];
@@ -377,6 +252,18 @@ export const GradebookModule = ({ child }: GradebookModuleProps) => {
         </div>
       </div>
 
+      {isLoading && (
+        <div className="rounded-xl border border-slate-100 bg-white p-4 text-sm font-medium text-slate-500">
+          Loading gradebook...
+        </div>
+      )}
+
+      {isError && (
+        <div className="rounded-xl border border-red-100 bg-red-50 p-4 text-sm font-medium text-red-700">
+          {error?.message ?? 'Failed to load gradebook.'}
+        </div>
+      )}
+
       {/* Action and Filtering Row */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white border border-slate-100 rounded-2xl p-4 shadow-xs">
         <div className="relative flex-1">
@@ -444,6 +331,7 @@ export const GradebookModule = ({ child }: GradebookModuleProps) => {
       </div>
 
       {/* Gradebook Adaptable responsive layout */}
+      {!isLoading && !isError && (
       <div className="bg-transparent md:bg-white md:border md:border-slate-100 rounded-2xl md:shadow-sm md:overflow-hidden">
         {/* MOBILE VIEW (Stack of beautifully spaced mobile-first cards) */}
         <div className="space-y-3.5 md:hidden">
@@ -618,6 +506,7 @@ export const GradebookModule = ({ child }: GradebookModuleProps) => {
           </table>
         </div>
       </div>
+      )}
 
       {/* Modal overlay for detailed task grade */}
       <AnimatePresence>

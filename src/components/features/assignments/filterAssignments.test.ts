@@ -10,10 +10,14 @@ const statusValues = ['graded', 'completed', 'due', 'submitted', 'missing'];
 
 const assignmentArb = fc.record<AssignmentEntry>({
   id: fc.string({ minLength: 1 }),
+  assessmentId: fc.string({ minLength: 1 }),
   title: fc.string({ minLength: 1 }),
+  section: fc.string({ minLength: 1 }),
   subject: fc.string({ minLength: 1 }),
   subjectColor: fc.constant('#3949ab'),
   type: fc.string({ minLength: 1 }),
+  taskType: fc.string({ minLength: 1 }),
+  taskTypeDisplay: fc.string({ minLength: 1 }),
   dueDate: fc.string({ minLength: 1 }),
   status: fc.constantFrom(...statusValues),
   score: fc.option(fc.integer({ min: 0, max: 100 }), { nil: null }),

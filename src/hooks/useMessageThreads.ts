@@ -1,468 +1,651 @@
-import { useState } from 'react';
-import type React from 'react';
-import { MessageThread } from '@/types';
-import { useSendMessage } from './useSendMessage';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getParentMe, getUserMe } from '@/services/parentService';
+import { getSectionTeacherAssignments } from '@/services/teacherService';
+import {
+  createChatThread,
+  listChatThreads,
+  markThreadRead,
+  resolveChatThread,
+  sendChatMessage,
+} from '@/services/messageService';
+import { getMediaFile, uploadFileToMedia } from '@/services/mediaService';
+import { getAccessToken } from '@/services/authService';
+import { queryKeys } from '@/lib/queryKeys';
+import type { MediaFileResponse } from '@/types/api';
+import type { Child } from '@/types';
+import type {
+  ChatMessage,
+  ChatThread,
+  DraftChatContact,
+  UploadState,
+} from '@/types/message';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+const avatarColors = ['bg-[#3949AB]', 'bg-[#128267]', 'bg-[#c85a23]', 'bg-[#0f766e]'];
 
-export interface HomeworkScore {
-  title: string;
-  score: string;
-  color: string;
+function toInitials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('');
 }
 
-export interface FocusStudent {
-  name: string;
-  id: string;
-  initials: string;
-  avatarBg: string;
-  grade: string;
-  avg: string;
-  avgVal: number;
-  tasks: string;
-  tasksVal: number;
-  engagement: string;
-  engagementVal: number;
-  homework: HomeworkScore[];
+function buildWebsocketUrl(threadId: string, token: string): string {
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL as string;
+  const url = new URL(baseUrl);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  url.pathname = `/ws/chat/threads/${threadId}/`;
+  url.search = `token=${encodeURIComponent(token)}`;
+  return url.toString();
 }
 
-export interface LocalThread {
-  id: string;
-  teacherName: string;
-  teacherInitials: string;
-  subject: string;
-  gradeLabel: string;
-  avatarBg: string;
-  time: string;
-  unread: boolean;
-  studentName: string;
-  preview: string;
-  phone: string;
-  email: string;
-  hours: string;
-  focusStudent: FocusStudent;
-  thread: MessageThread[];
+function formatError(error: unknown, fallback: string): string {
+  if (!error) return fallback;
+  if (error instanceof Error) return error.message || fallback;
+  return fallback;
+}
+
+function normalizeAttachmentError(message: string): string {
+  if (message.includes('not finished uploading')) {
+    return 'Attachment is still uploading. Please wait and try again.';
+  }
+  if (message.includes('does not belong to the current user')) {
+    return 'That attachment is not owned by your account.';
+  }
+  if (message.includes('Invalid') || message.includes('invalid')) {
+    return 'Attachment reference is invalid or expired.';
+  }
+  return message;
+}
+
+export interface MessageContact extends DraftChatContact {
+  unreadCount: number;
+  updatedAt: string | null;
+  latestPreview: string;
+  latestMessageAt: string | null;
 }
 
 export interface UseMessageThreadsReturn {
-  threads: LocalThread[];
-  selectedIdx: number;
-  setSelectedIdx: (i: number) => void;
-  replyText: string;
-  setReplyText: (text: string) => void;
-  handleSend: (e?: React.FormEvent) => void;
-  filteredThreads: LocalThread[];
+  contacts: MessageContact[];
+  filteredContacts: MessageContact[];
+  activeKey: string | null;
+  activeContact: MessageContact | null;
+  activeThreadId: string | null;
+  activeMessages: ChatMessage[];
+  currentUserId: string | null;
+  messagesLoading: boolean;
+  threadsLoading: boolean;
+  isSending: boolean;
+  sendError: string | null;
+  websocketState: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
+  uploadState: UploadState;
   searchTerm: string;
-  setSearchTerm: (term: string) => void;
+  setSearchTerm: (value: string) => void;
+  setActiveKey: (key: string) => void;
+  sendMessage: (params: { text: string; file?: File | null }) => Promise<boolean>;
+  clearAttachment: () => void;
+  attachmentMetaById: Record<string, MediaFileResponse>;
 }
 
-// ─── Static Dataset ───────────────────────────────────────────────────────────
+export function useMessageThreads(child: Child): UseMessageThreadsReturn {
+  const queryClient = useQueryClient();
+  const reconnectTimerRef = useRef<number | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+  const currentUserIdRef = useRef<string | null>(null);
+  const pendingReadThreadRef = useRef<string | null>(null);
 
-const localThreads: LocalThread[] = [
-  {
-    id: "T-01",
-    teacherName: "Mr. Tadesse",
-    teacherInitials: "MT",
-    subject: "Mathematics",
-    gradeLabel: "Grade 7A",
-    avatarBg: "bg-[#3949AB]",
-    time: "9:42 AM",
-    unread: true,
-    studentName: "SARA BEKELE",
-    preview: "Sara's quiz result is now availa...",
-    phone: "+251 911 23 4567",
-    email: "t.tadesse@school.et",
-    hours: "Available 8AM - 4PM",
-    focusStudent: {
-      name: "Sara Bekele",
-      id: "STU-00421",
-      initials: "SB",
-      avatarBg: "bg-[#3949AB]",
-      grade: "Grade 7A",
-      avg: "76%",
-      avgVal: 76,
-      tasks: "7/10",
-      tasksVal: 70,
-      engagement: "88%",
-      engagementVal: 88,
-      homework: [
-        {
-          title: "Mid-Term Quiz",
-          score: "28/30",
-          color: "text-emerald-600 bg-emerald-50 border border-emerald-100/40",
-        },
-        {
-          title: "Problem Solving",
-          score: "8/10",
-          color: "text-[#3949AB] bg-blue-50 border border-blue-100/40",
-        },
-        {
-          title: "Linear Equations",
-          score: "14/20",
-          color: "text-amber-600 bg-[#fffbe6] border border-[#ffe58f]/40",
-        },
-        {
-          title: "Ch.3 Summary",
-          score: "Missing",
-          color: "text-red-500 bg-red-50 border border-red-100/40",
-        },
-      ],
-    },
-    thread: [
-      {
-        dateGroup: "MONDAY, JUN 2",
-        messages: [
-          {
-            sender: "teacher",
-            text: "Hello! I wanted to let you know that Sara did very well in today's classwork on linear equations. She's showing great progress.",
-            time: "Mon, 10:15 AM",
-          },
-          {
-            sender: "parent",
-            text: "That's wonderful to hear! She's been practicing at home. Thank you for letting me know.",
-            time: "Mon, 10:20 AM",
-          },
-        ],
-      },
-      {
-        dateGroup: "TODAY, JUN 3",
-        messages: [
-          {
-            sender: "teacher",
-            text: "Good morning! Sara's mid-term practice quiz has been graded — she scored 28/30.",
-            time: "Today, 9:30 AM",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: "T-02",
-    teacherName: "Ms. Alemu",
-    teacherInitials: "MA",
-    subject: "Biology",
-    gradeLabel: "Grade 7A",
-    avatarBg: "bg-[#128267]",
-    time: "Yesterday",
-    unread: false,
-    studentName: "SARA BEKELE",
-    preview: "Lab report submitted, thank ...",
-    phone: "+251 912 34 5678",
-    email: "m.alemu@school.et",
-    hours: "Available 9AM - 3PM",
-    focusStudent: {
-      name: "Sara Bekele",
-      id: "STU-00421",
-      initials: "SB",
-      avatarBg: "bg-[#3949AB]",
-      grade: "Grade 7A",
-      avg: "76%",
-      avgVal: 76,
-      tasks: "7/10",
-      tasksVal: 70,
-      engagement: "88%",
-      engagementVal: 88,
-      homework: [
-        {
-          title: "Photosynthesis Lab",
-          score: "9.5/10",
-          color: "text-emerald-600 bg-emerald-50 border border-emerald-100/40",
-        },
-        {
-          title: "Plant Cell Diagram",
-          score: "10/10",
-          color: "text-emerald-600 bg-emerald-50 border border-emerald-100/40",
-        },
-        {
-          title: "Quiz 1 Biology",
-          score: "8/10",
-          color: "text-[#3949AB] bg-blue-50 border border-blue-100/40",
-        },
-      ],
-    },
-    thread: [
-      {
-        dateGroup: "FRIDAY, MAY 30",
-        messages: [
-          {
-            sender: "teacher",
-            text: "Dear parent, the biology lab report from Sara was submitted today. Thank you!",
-            time: "Fri, 3:15 PM",
-          },
-          {
-            sender: "parent",
-            text: "Excellent. Please let me know if she needs extra help on photosynthesis.",
-            time: "Fri, 3:40 PM",
-          },
-        ],
-      },
-      {
-        dateGroup: "YESTERDAY",
-        messages: [
-          {
-            sender: "teacher",
-            text: "Lab report submitted, thank you. She did excellent, 9.5 out of 10!",
-            time: "Yesterday, 4:20 PM",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: "T-03",
-    teacherName: "Dr. Haile",
-    teacherInitials: "DH",
-    subject: "Chemistry",
-    gradeLabel: "Grade 7A",
-    avatarBg: "bg-[#c85a23]",
-    time: "Mon",
-    unread: true,
-    studentName: "SARA BEKELE",
-    preview: "The diagram project is still pe...",
-    phone: "+251 913 45 6789",
-    email: "h.haile@school.et",
-    hours: "Available 10AM - 5PM",
-    focusStudent: {
-      name: "Sara Bekele",
-      id: "STU-00421",
-      initials: "SB",
-      avatarBg: "bg-[#3949AB]",
-      grade: "Grade 7A",
-      avg: "76%",
-      avgVal: 76,
-      tasks: "7/10",
-      tasksVal: 70,
-      engagement: "88%",
-      engagementVal: 88,
-      homework: [
-        {
-          title: "Periodic Table Quiz",
-          score: "7/10",
-          color: "text-[#3949AB]/80 bg-blue-50 border border-blue-50",
-        },
-        {
-          title: "Molecular Prep",
-          score: "Pending",
-          color: "text-amber-500 bg-[#fffbe6] border border-[#ffe58f]/40",
-        },
-        {
-          title: "Lab Report 2",
-          score: "Missing",
-          color: "text-red-500 bg-red-50 border border-red-100/40",
-        },
-      ],
-    },
-    thread: [
-      {
-        dateGroup: "MONDAY, JUN 2",
-        messages: [
-          {
-            sender: "teacher",
-            text: "Hello, the molecular diagram project is still pending for Sara Bekele. Please check.",
-            time: "Mon, 11:00 AM",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: "T-04",
-    teacherName: "Ms. Biruk T.",
-    teacherInitials: "BT",
-    subject: "English",
-    gradeLabel: "Grade 4B",
-    avatarBg: "bg-[#4f53cc]",
-    time: "Sun",
-    unread: false,
-    studentName: "YONAS BEKELE",
-    preview: "He did very well this week!",
-    phone: "+251 914 56 7890",
-    email: "b.tesfaye@school.et",
-    hours: "Available 8AM - 2PM",
-    focusStudent: {
-      name: "Yonas Bekele",
-      id: "STU-00422",
-      initials: "YB",
-      avatarBg: "bg-[#128267]",
-      grade: "Grade 4B",
-      avg: "84%",
-      avgVal: 84,
-      tasks: "9/10",
-      tasksVal: 90,
-      engagement: "92%",
-      engagementVal: 92,
-      homework: [
-        {
-          title: "Spelling Bee Champ",
-          score: "10/10",
-          color: "text-[#128267] font-bold bg-[#e6fcf4] border-none",
-        },
-        {
-          title: "Vocabulary Practice",
-          score: "9.5/10",
-          color: "text-[#128267] font-bold bg-[#e6fcf4] border-none",
-        },
-        {
-          title: "Grammar Quiz",
-          score: "8/10",
-          color: "text-[#3949AB] font-bold bg-blue-50 border-none",
-        },
-      ],
-    },
-    thread: [
-      {
-        dateGroup: "SUNDAY, JUN 1",
-        messages: [
-          {
-            sender: "teacher",
-            text: "He did very well this week in the spelling bee and reading exercises!",
-            time: "Sun, 2:40 PM",
-          },
-          {
-            sender: "parent",
-            text: "Awesome news, thank you Ms. Biruk!",
-            time: "Sun, 3:00 PM",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: "T-05",
-    teacherName: "Mr. Gebre",
-    teacherInitials: "TG",
-    subject: "History",
-    gradeLabel: "Grade 10A",
-    avatarBg: "bg-[#5d7c63]",
-    time: "Fri",
-    unread: false,
-    studentName: "LIYA BEKELE",
-    preview: "Chemistry exam is next Thur...",
-    phone: "+251 915 67 8901",
-    email: "g.teshome@school.et",
-    hours: "Available 9AM - 4PM",
-    focusStudent: {
-      name: "Liya Bekele",
-      id: "STU-00502",
-      initials: "LB",
-      avatarBg: "bg-[#c85a23]",
-      grade: "Grade 10A",
-      avg: "89%",
-      avgVal: 89,
-      tasks: "10/10",
-      tasksVal: 100,
-      engagement: "95%",
-      engagementVal: 95,
-      homework: [
-        {
-          title: "French Revolution",
-          score: "10/10",
-          color: "text-[#5d7c63] font-bold bg-slate-50 border-none",
-        },
-        {
-          title: "Timeline draft",
-          score: "9/10",
-          color: "text-[#5d7c63] font-bold bg-slate-50 border-none",
-        },
-        {
-          title: "Class essay",
-          score: "8.5/10",
-          color: "text-[#3949AB] font-bold bg-blue-50 border-none",
-        },
-      ],
-    },
-    thread: [
-      {
-        dateGroup: "FRIDAY, MAY 30",
-        messages: [
-          {
-            sender: "teacher",
-            text: "Chemistry exam is next Thursday.",
-            time: "Fri, 10:00 AM",
-          },
-          {
-            sender: "parent",
-            text: "Thank you, we will make sure she prepares!",
-            time: "Fri, 10:30 AM",
-          },
-        ],
-      },
-    ],
-  },
-];
-
-// ─── Hook ─────────────────────────────────────────────────────────────────────
-
-export function useMessageThreads(): UseMessageThreadsReturn {
-  const [threads, setThreads] = useState<LocalThread[]>(localThreads);
-  const [selectedIdx, setSelectedIdx] = useState(0);
+  const [activeKey, setActiveKey] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [replyText, setReplyText] = useState('');
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [isSending, setIsSending] = useState(false);
+  const [websocketState, setWebsocketState] = useState<
+    'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected'
+  >('idle');
+  const [uploadState, setUploadState] = useState<UploadState>({
+    status: 'idle',
+    file: null,
+    mediaId: null,
+    progressLabel: null,
+    error: null,
+  });
+  const [messageMap, setMessageMap] = useState<Record<string, ChatMessage[]>>({});
+  const [attachmentMetaById, setAttachmentMetaById] = useState<Record<string, MediaFileResponse>>({});
+  const [resolvedDraftKeys, setResolvedDraftKeys] = useState<Record<string, true>>({});
 
-  const currentThreadId = threads[selectedIdx]?.id ?? '';
-  const sendMessageMutation = useSendMessage(currentThreadId);
+  const { data: parentMe } = useQuery({
+    queryKey: queryKeys.parentMe(),
+    queryFn: getParentMe,
+  });
 
-  const handleSend = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!replyText.trim()) return;
+  const { data: userMe } = useQuery({
+    queryKey: ['users', 'me'],
+    queryFn: getUserMe,
+  });
 
-    const updated = [...threads];
-    const target = { ...updated[selectedIdx] };
-    const threadCopy = [...target.thread];
+  const { data: teacherAssignments = [] } = useQuery({
+    queryKey: ['teacher-assignments', 'section', child.sectionId],
+    queryFn: () => getSectionTeacherAssignments(child.sectionId as string),
+    enabled: Boolean(child.sectionId),
+  });
 
-    // Find or create the "TODAY, JUN 3" date group
-    let todayGroupIdx = threadCopy.findIndex(
-      (group) => group.dateGroup === 'TODAY, JUN 3',
-    );
+  const {
+    data: chatThreads = [],
+    isLoading: threadsLoading,
+  } = useQuery({
+    queryKey: queryKeys.chatThreads(),
+    queryFn: listChatThreads,
+  });
 
-    if (todayGroupIdx === -1) {
-      threadCopy.push({ dateGroup: 'TODAY, JUN 3', messages: [] });
-      todayGroupIdx = threadCopy.length - 1;
-    }
-
-    const todayGroup = {
-      ...threadCopy[todayGroupIdx],
-      messages: [
-        ...threadCopy[todayGroupIdx].messages,
-        {
-          sender: 'parent' as const,
-          text: replyText,
-          time: 'Today, 11:51 AM',
-        },
-      ],
-    };
-
-    threadCopy[todayGroupIdx] = todayGroup;
-
-    updated[selectedIdx] = {
-      ...target,
-      thread: threadCopy,
-      time: 'Today',
-      preview: replyText,
-      unread: false,
-    };
-
-    setThreads(updated);
-    setReplyText('');
-    sendMessageMutation.mutate({ text: replyText });
-  };
-
-  const filteredThreads = threads.filter(
-    (t) =>
-      t.teacherName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.studentName.toLowerCase().includes(searchTerm.toLowerCase()),
+  const childThreads = useMemo(
+    () => chatThreads.filter((thread) => thread.student === child.id),
+    [chatThreads, child.id]
   );
 
+  useEffect(() => {
+    currentUserIdRef.current = userMe?.id ?? null;
+  }, [userMe?.id]);
+
+  const contacts = useMemo<MessageContact[]>(() => {
+    const threadByTeacherId = new Map(childThreads.map((thread) => [thread.teacher, thread]));
+    const baseContacts = teacherAssignments.map((assignment, index) => {
+      const thread = threadByTeacherId.get(assignment.teacher_id) ?? null;
+      const messages = thread ? messageMap[thread.id] : undefined;
+      const latest = messages?.[messages.length - 1] ?? thread?.latest_message ?? null;
+
+      return {
+        key: thread?.id ?? `draft:${assignment.teacher_id}:${child.id}`,
+        teacherId: assignment.teacher_id,
+        teacherName: assignment.teacher_name,
+        teacherInitials: toInitials(assignment.teacher_name),
+        subjectName: assignment.subject_name,
+        gradeLabel: assignment.section_name || assignment.grade_name,
+        studentName: child.name.toUpperCase(),
+        avatarBg: avatarColors[index % avatarColors.length],
+        existingThreadId: thread?.id ?? null,
+        unreadCount: thread?.unread_count ?? 0,
+        updatedAt: thread?.updated_at ?? latest?.created_at ?? null,
+        latestPreview:
+          latest?.text?.trim() ||
+          (latest?.attachment ? 'Attachment shared' : 'No messages yet'),
+        latestMessageAt: latest?.created_at ?? null,
+      };
+    });
+
+    const orphanThreads = childThreads
+      .filter((thread) => !teacherAssignments.some((assignment) => assignment.teacher_id === thread.teacher))
+      .map((thread, index) => {
+        const messages = messageMap[thread.id];
+        const latest = messages?.[messages.length - 1] ?? thread.latest_message ?? null;
+        return {
+          key: thread.id,
+          teacherId: thread.teacher,
+          teacherName: 'Teacher',
+          teacherInitials: 'TE',
+          subjectName: 'Conversation',
+          gradeLabel: child.section,
+          studentName: child.name.toUpperCase(),
+          avatarBg: avatarColors[index % avatarColors.length],
+          existingThreadId: thread.id,
+          unreadCount: thread.unread_count,
+          updatedAt: thread.updated_at,
+          latestPreview:
+            latest?.text?.trim() ||
+            (latest?.attachment ? 'Attachment shared' : 'No messages yet'),
+          latestMessageAt: latest?.created_at ?? null,
+        };
+      });
+
+    return [...baseContacts, ...orphanThreads].sort((left, right) => {
+      const leftTime = left.updatedAt ? new Date(left.updatedAt).getTime() : 0;
+      const rightTime = right.updatedAt ? new Date(right.updatedAt).getTime() : 0;
+      return rightTime - leftTime;
+    });
+  }, [child.name, child.section, child.id, childThreads, teacherAssignments, messageMap]);
+
+  useEffect(() => {
+    if (!contacts.length) {
+      setActiveKey(null);
+      return;
+    }
+    setActiveKey((current) => {
+      if (current && contacts.some((contact) => contact.key === current)) {
+        return current;
+      }
+      return contacts[0].key;
+    });
+  }, [contacts]);
+
+  useEffect(() => {
+    const attachmentIds = new Set<string>();
+    Object.values(messageMap).forEach((messages) => {
+      messages.forEach((message) => {
+        if (message.attachment && !attachmentMetaById[message.attachment]) {
+          attachmentIds.add(message.attachment);
+        }
+      });
+    });
+
+    if (!attachmentIds.size) return;
+    let cancelled = false;
+
+    Promise.all(
+      [...attachmentIds].map(async (attachmentId) => [attachmentId, await getMediaFile(attachmentId)] as const)
+    )
+      .then((entries) => {
+        if (cancelled) return;
+        setAttachmentMetaById((current) => {
+          const next = { ...current };
+          for (const [attachmentId, file] of entries) {
+            next[attachmentId] = file;
+          }
+          return next;
+        });
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [messageMap, attachmentMetaById]);
+
+  const filteredContacts = useMemo(() => {
+    const needle = searchTerm.trim().toLowerCase();
+    if (!needle) return contacts;
+    return contacts.filter((contact) =>
+      [contact.teacherName, contact.subjectName, contact.studentName]
+        .some((value) => value.toLowerCase().includes(needle))
+    );
+  }, [contacts, searchTerm]);
+
+  const activeContact = useMemo(
+    () => contacts.find((contact) => contact.key === activeKey) ?? contacts[0] ?? null,
+    [contacts, activeKey]
+  );
+
+  const activeThreadId = activeContact?.existingThreadId ?? null;
+  const activeMessages = activeThreadId ? messageMap[activeThreadId] ?? [] : [];
+  const messagesLoading = Boolean(
+    activeContact &&
+      ((activeThreadId && !(activeThreadId in messageMap)) ||
+        (!activeThreadId && !resolvedDraftKeys[activeContact.key]))
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadActiveConversation() {
+      if (!activeContact) return;
+
+      const existingThreadId = activeContact.existingThreadId;
+      if (existingThreadId && existingThreadId in messageMap) return;
+
+      const response = await resolveChatThread({
+        studentId: child.id,
+        teacherId: activeContact.teacherId,
+      });
+
+      if (cancelled) return;
+
+      if (!response.thread) {
+        if (existingThreadId) {
+          setMessageMap((current) =>
+            existingThreadId in current ? current : { ...current, [existingThreadId]: [] }
+          );
+        } else {
+          setResolvedDraftKeys((current) =>
+            activeContact.key in current ? current : { ...current, [activeContact.key]: true }
+          );
+        }
+        return;
+      }
+
+      setResolvedDraftKeys((current) => {
+        if (!(activeContact.key in current)) return current;
+        const next = { ...current };
+        delete next[activeContact.key];
+        return next;
+      });
+      queryClient.setQueryData<ChatThread[]>(queryKeys.chatThreads(), (current = []) => {
+        const withoutResolved = current.filter((thread) => thread.id !== response.thread!.id);
+        return [response.thread!, ...withoutResolved];
+      });
+      setMessageMap((current) => ({
+        ...current,
+        [response.thread!.id]: response.messages,
+      }));
+
+      if (!existingThreadId) {
+        setActiveKey(response.thread.id);
+      }
+    }
+
+    loadActiveConversation().catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeContact, child.id, messageMap, queryClient]);
+
+  useEffect(() => {
+    const currentUserId = userMe?.id ?? null;
+    if (!activeThreadId || !currentUserId) {
+      pendingReadThreadRef.current = null;
+      return;
+    }
+
+    const hasUnreadIncoming = activeMessages.some(
+      (message) =>
+        message.sender_id !== currentUserId &&
+        !message.read_by_ids.includes(currentUserId)
+    );
+    if (!hasUnreadIncoming || pendingReadThreadRef.current === activeThreadId) return;
+
+    pendingReadThreadRef.current = activeThreadId;
+    markThreadRead(activeThreadId)
+      .then(() => {
+        setMessageMap((current) => ({
+          ...current,
+          [activeThreadId]: (current[activeThreadId] ?? []).map((message) => {
+            if (
+              message.sender_id === currentUserId ||
+              message.read_by_ids.includes(currentUserId)
+            ) {
+              return message;
+            }
+            return {
+              ...message,
+              read_by_ids: [...message.read_by_ids, currentUserId],
+            };
+          }),
+        }));
+        queryClient.setQueryData<ChatThread[]>(
+          queryKeys.chatThreads(),
+          (current = []) =>
+            current.map((thread) =>
+              thread.id === activeThreadId
+                ? {
+                    ...thread,
+                    unread_count: 0,
+                    last_read_at: new Date().toISOString(),
+                  }
+                : thread
+            )
+        );
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        pendingReadThreadRef.current = null;
+      });
+  }, [activeMessages, activeThreadId, queryClient, userMe?.id]);
+
+  useEffect(() => {
+    if (reconnectTimerRef.current) {
+      window.clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    if (socketRef.current) {
+      socketRef.current.close();
+      socketRef.current = null;
+    }
+    if (!activeThreadId) {
+      setWebsocketState('idle');
+      return;
+    }
+
+    const token = getAccessToken();
+    if (!token) {
+      setWebsocketState('disconnected');
+      return;
+    }
+
+    let reconnectAttempts = 0;
+    let disposed = false;
+
+    const connect = () => {
+      if (disposed) return;
+      setWebsocketState(reconnectAttempts === 0 ? 'connecting' : 'reconnecting');
+      const socket = new WebSocket(buildWebsocketUrl(activeThreadId, token));
+      socketRef.current = socket;
+
+      socket.onopen = () => {
+        reconnectAttempts = 0;
+        setWebsocketState('connected');
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data) as
+            | { event: 'message.created'; thread_id: string; message: ChatMessage }
+            | { event: 'message.read'; thread_id: string; reader_id: string; count: number };
+
+          if (payload.event === 'message.created') {
+            setMessageMap((current) => {
+              const existing = current[payload.thread_id] ?? [];
+              if (existing.some((message) => message.id === payload.message.id)) {
+                return current;
+              }
+              return {
+                ...current,
+                [payload.thread_id]: [...existing, payload.message],
+              };
+            });
+            queryClient.setQueryData<ChatThread[]>(
+              queryKeys.chatThreads(),
+              (current = []) =>
+                current.map((thread) => {
+                  if (thread.id !== payload.thread_id) return thread;
+                  const isOwnMessage = payload.message.sender_id === currentUserIdRef.current;
+                  return {
+                    ...thread,
+                    updated_at: payload.message.created_at,
+                    latest_message: payload.message,
+                    unread_count:
+                      thread.id === activeThreadId || isOwnMessage
+                        ? thread.unread_count
+                        : thread.unread_count + 1,
+                  };
+                })
+            );
+          }
+
+          if (payload.event === 'message.read') {
+            setMessageMap((current) => {
+              const threadMessages = current[payload.thread_id] ?? [];
+              return {
+                ...current,
+                [payload.thread_id]: threadMessages.map((message) => {
+                  if (message.sender_id !== currentUserIdRef.current) {
+                    return message;
+                  }
+                  if (message.read_by_ids.includes(payload.reader_id)) {
+                    return message;
+                  }
+                  return {
+                    ...message,
+                    read_by_ids: [...message.read_by_ids, payload.reader_id],
+                  };
+                }),
+              };
+            });
+          }
+        } catch {
+          // Ignore malformed payloads.
+        }
+      };
+
+      socket.onclose = () => {
+        if (disposed) return;
+        setWebsocketState('disconnected');
+        reconnectAttempts += 1;
+        const delay = Math.min(1000 * 2 ** (reconnectAttempts - 1), 10000);
+        reconnectTimerRef.current = window.setTimeout(connect, delay);
+      };
+
+      socket.onerror = () => {
+        socket.close();
+      };
+    };
+
+    connect();
+
+    return () => {
+      disposed = true;
+      if (reconnectTimerRef.current) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      if (socketRef.current) {
+        socketRef.current.close();
+        socketRef.current = null;
+      }
+    };
+  }, [activeThreadId, queryClient]);
+
+  async function ensureThread(contact: MessageContact): Promise<ChatThread> {
+    if (contact.existingThreadId) {
+      const existing = chatThreads.find((thread) => thread.id === contact.existingThreadId);
+      if (existing) return existing;
+    }
+
+    const thread = await createChatThread({
+      parent: parentMe!.id,
+      teacher: contact.teacherId,
+      student: child.id,
+    });
+
+    queryClient.setQueryData<ChatThread[]>(
+      queryKeys.chatThreads(),
+      (current = []) => {
+        const withoutDuplicate = current.filter((item) => item.id !== thread.id);
+        return [thread, ...withoutDuplicate];
+      }
+    );
+    setActiveKey(thread.id);
+    return thread;
+  }
+
+  async function sendMessage(params: { text: string; file?: File | null }) {
+    if (!activeContact || !parentMe) {
+      setSendError('Unable to determine the active conversation.');
+      return false;
+    }
+
+    const trimmedText = params.text.trim();
+    if (!trimmedText && !params.file && !uploadState.mediaId) {
+      setSendError('Type a message or attach a file.');
+      return false;
+    }
+
+    setSendError(null);
+    setIsSending(true);
+
+    try {
+      let attachmentId = uploadState.mediaId;
+
+      if (params.file) {
+        setUploadState({
+          status: 'uploading',
+          file: params.file,
+          mediaId: null,
+          progressLabel: 'Uploading attachment...',
+          error: null,
+        });
+        attachmentId = await uploadFileToMedia(params.file);
+        setUploadState({
+          status: 'uploaded',
+          file: params.file,
+          mediaId: attachmentId,
+          progressLabel: 'Attachment uploaded',
+          error: null,
+        });
+      }
+
+      const thread = await ensureThread(activeContact);
+      const message = await sendChatMessage(thread.id, {
+        text: trimmedText || undefined,
+        attachment: attachmentId || undefined,
+      });
+
+      setMessageMap((current) => ({
+        ...current,
+        [thread.id]: [...(current[thread.id] ?? []), message],
+      }));
+
+      queryClient.setQueryData<ChatThread[]>(
+        queryKeys.chatThreads(),
+        (current = []) =>
+          current.map((item) =>
+            item.id === thread.id
+              ? {
+                  ...item,
+                  updated_at: message.created_at,
+                  unread_count: 0,
+                  latest_message: message,
+                }
+              : item
+          )
+      );
+
+      if (attachmentId) {
+        const file = await getMediaFile(attachmentId);
+        setAttachmentMetaById((current) => ({ ...current, [attachmentId!]: file }));
+      }
+
+      setUploadState({
+        status: 'idle',
+        file: null,
+        mediaId: null,
+        progressLabel: null,
+        error: null,
+      });
+      return true;
+    } catch (error) {
+      const message = normalizeAttachmentError(
+        formatError(error, 'Failed to send your message.')
+      );
+      setSendError(message);
+      setUploadState((current) => ({
+        ...current,
+        status: current.file ? 'error' : current.status,
+        error: message,
+        progressLabel: null,
+      }));
+    } finally {
+      setIsSending(false);
+    }
+    return false;
+  }
+
+  function clearAttachment() {
+    setUploadState({
+      status: 'idle',
+      file: null,
+      mediaId: null,
+      progressLabel: null,
+      error: null,
+    });
+  }
+
   return {
-    threads,
-    selectedIdx,
-    setSelectedIdx,
-    replyText,
-    setReplyText,
-    handleSend,
-    filteredThreads,
+    contacts,
+    filteredContacts,
+    activeKey,
+    activeContact,
+    activeThreadId,
+    activeMessages,
+    currentUserId: userMe?.id ?? null,
+    messagesLoading,
+    threadsLoading,
+    isSending,
+    sendError,
+    websocketState,
+    uploadState,
     searchTerm,
     setSearchTerm,
+    setActiveKey,
+    sendMessage,
+    clearAttachment,
+    attachmentMetaById,
   };
 }

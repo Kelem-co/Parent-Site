@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
-import { getMessages } from '@/services/messageService';
+import { listThreadMessages } from '@/services/messageService';
 import { queryKeys } from '@/lib/queryKeys';
-import type { MessageEntry } from '@/types/message';
 import type { ApiError } from '@/types/api';
+import type { ChatMessage } from '@/types/message';
 
-export function useMessages() {
-  return useQuery<MessageEntry[], ApiError>({
-    queryKey: queryKeys.messages(),
-    queryFn: () => getMessages(),
+export function useMessages(threadId: string | null) {
+  return useQuery<ChatMessage[], ApiError>({
+    queryKey: threadId ? queryKeys.chatThreadMessages(threadId) : ['chat', 'threads', 'inactive'],
+    queryFn: () => listThreadMessages(threadId as string),
+    enabled: Boolean(threadId),
   });
 }

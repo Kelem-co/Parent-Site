@@ -1,20 +1,18 @@
-export { useHomeworkConfirmation } from './useHomeworkConfirmation';
-export type { UseHomeworkConfirmationReturn } from './useHomeworkConfirmation';
-
 export { useMessageThreads } from './useMessageThreads';
 export type {
   UseMessageThreadsReturn,
-  LocalThread,
-  FocusStudent,
-  HomeworkScore,
+  MessageContact,
 } from './useMessageThreads';
 
 export { useChildren } from './useChildren';
 export { useAssignments } from './useAssignments';
+export { useConfirmHomework } from './useConfirmHomework';
+export { useCurrentCalendarDocument } from './useCurrentCalendarDocument';
 export { useAttendance } from './useAttendance';
 export { useGrades } from './useGrades';
 export { useMessages } from './useMessages';
 export { useNotifications } from './useNotifications';
 export { useSchedule } from './useSchedule';
 export { useSendMessage } from './useSendMessage';
+export { useTodaysHomework } from './useTodaysHomework';
 export { useLogAbsence } from './useLogAbsence';

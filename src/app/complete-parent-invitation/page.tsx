@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import { completeParentInvitation } from '@/services/authService';
 import { AlertCircle, CheckCircle2, KeyRound, Loader2 } from 'lucide-react';
@@ -15,14 +15,14 @@ function toFieldError(error: unknown, key: string): string | null {
 
 export default function CompleteParentInvitationPage() {
   const router = useRouter();
-  const params = useParams<{ uid: string; token: string }>();
+  const searchParams = useSearchParams();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     async function run() {
-      const uid = params?.uid;
-      const token = params?.token;
+      const uid = searchParams.get('uid');
+      const token = searchParams.get('token');
 
       if (!uid || !token) {
         setErrorMessage('Missing invitation link details. Please use the full link from your invitation.');
@@ -46,7 +46,7 @@ export default function CompleteParentInvitationPage() {
     }
 
     run();
-  }, [params, router]);
+  }, [router, searchParams]);
 
   return (
     <main className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-slate-50 px-4 font-sans">

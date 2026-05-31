@@ -91,34 +91,81 @@ const server = setupServer(
     return HttpResponse.json(body);
   }),
 
-  // GET /api/children/:id/attendance
-  http.get(`${BASE}/api/children/:id/attendance`, ({ params }) => {
-    const { id } = params as { id: string };
-    const child = CHILDREN.find((c) => c.id === id);
+  http.get(`${BASE}/api/attendance/by-student/`, ({ request }) => {
+    const url = new URL(request.url);
+    const studentId = url.searchParams.get('student');
+    const child = CHILDREN.find((c) => c.id === studentId);
     if (!child) {
-      return HttpResponse.json(
-        { success: false, error: { errorCode: 'NOT_FOUND', message: `Child ${id} not found` } },
-        { status: 404 },
-      );
+      return HttpResponse.json([], { status: 404 });
     }
-    const log = child.attendance_log;
-    const daysPresent = log.filter((e) => e.status === 'present').length;
-    const totalDays = log.length;
-    const termAttendance = totalDays > 0 ? Math.round((daysPresent / totalDays) * 100) : 100;
-    const attendanceData: AttendanceResponse = {
-      log,
-      termAttendance,
-      daysPresent,
-      totalDays,
-      absences: log.filter((e) => e.status === 'absent').length,
-      lates: log.filter((e) => e.status === 'late').length,
-    };
-    const body: ApiResponse<AttendanceResponse> = {
-      success: true,
-      data: attendanceData,
-      meta: { timestamp: new Date().toISOString() },
-    };
-    return HttpResponse.json(body);
+    return HttpResponse.json(
+      child.attendance_log
+        .filter((entry) => entry.status !== 'no-school' && entry.status !== 'empty')
+        .map((entry, index) => ({
+          id: `attendance-${studentId}-${index}`,
+          date: entry.date,
+          status: entry.status.toUpperCase(),
+          status_display: entry.status,
+          remarks: '',
+          needs_reason: entry.status === 'absent' || entry.status === 'late',
+          student_name: child.name,
+          student_roll_no: '12',
+          section_name: child.section,
+          grade_name: child.grade,
+          academic_year_name: '2025/2026',
+          branch_name: child.branchName,
+          recorded_by_name: 'Teacher One',
+        })),
+    );
+  }),
+
+  http.get(`${BASE}/api/attendance-summaries/`, ({ request }) => {
+    const url = new URL(request.url);
+    const studentId = url.searchParams.get('student');
+    const child = CHILDREN.find((c) => c.id === studentId);
+    if (!child) {
+      return HttpResponse.json([]);
+    }
+    const rows = child.attendance_log.filter((entry) => entry.status !== 'no-school' && entry.status !== 'empty');
+    const total_present = rows.filter((entry) => entry.status === 'present').length;
+    const total_absent = rows.filter((entry) => entry.status === 'absent').length;
+    const total_late = rows.filter((entry) => entry.status === 'late').length;
+    const total_excused = rows.filter((entry) => entry.status === 'excused').length;
+    const total_school_days = rows.length;
+    return HttpResponse.json([{
+      id: `summary-${studentId}`,
+      student: studentId,
+      student_name: child.name,
+      academic_year: 'ay-1',
+      academic_year_name: '2025/2026',
+      total_present,
+      total_absent,
+      total_late,
+      total_excused,
+      total_school_days,
+      attendance_rate: total_school_days > 0 ? Math.round(((total_present + total_excused) / total_school_days) * 100) : 0,
+      last_updated: new Date().toISOString(),
+    }]);
+  }),
+
+  http.get(`${BASE}/api/attendance-reasons/`, ({ request }) => {
+    const url = new URL(request.url);
+    const studentId = url.searchParams.get('student');
+    const child = CHILDREN.find((c) => c.id === studentId);
+    if (!child) {
+      return HttpResponse.json([]);
+    }
+    return HttpResponse.json(
+      child.attendance_log
+        .filter((entry) => entry.status === 'absent' || entry.status === 'late')
+        .map((entry, index) => ({
+          id: `reason-${studentId}-${index}`,
+          attendance: `attendance-${studentId}-${index}`,
+          reason_category: index % 2 === 0 ? 'SICKNESS' : 'UNKNOWN',
+          note: '',
+          parent_confirmed: index % 2 === 0,
+        })),
+    );
   }),
 
   // GET /api/children/:id/grades
@@ -250,17 +297,17 @@ describe('MSW mock layer integration (Task 8.4)', () => {
 
   it('getAssignments returns assignments for first child', async () => {
     const child = CHILDREN[0];
-    const result = await getAssignments(child.id);
+    const result = await getAssignments(child);
     expect(result).toHaveLength(child.assignments.length);
-    expect(result[0].id).toBe(child.assignments[0].id);
+    expect(result[0].assessmentId).toBe(`assessment-${child.assignments[0].id}`);
   });
 
   it('getAttendance returns attendance data for first child', async () => {
     const child = CHILDREN[0];
     const result = await getAttendance(child.id);
-    expect(result.log).toHaveLength(child.attendance_log.length);
-    expect(typeof result.termAttendance).toBe('number');
-    expect(typeof result.daysPresent).toBe('number');
+    expect(result.records.length).toBeGreaterThan(0);
+    expect(typeof result.summary.termAttendance).toBe('number');
+    expect(typeof result.summary.daysPresent).toBe('number');
   });
 
   it('getGrades returns grades for first child', async () => {

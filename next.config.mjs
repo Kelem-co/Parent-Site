@@ -4,8 +4,6 @@
 // in Next.js 13+ (including Next.js 16) without any additional webpack config.
 
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  output: 'export',
-}
+const nextConfig = {}
 
 export default nextConfig

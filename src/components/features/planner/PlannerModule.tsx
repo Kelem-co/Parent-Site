@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import {
   ChevronDown,
   X,
-  Eye,
   Download,
   FileText,
   Printer,
@@ -10,6 +9,7 @@ import {
 import { motion } from "motion/react";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
+import { useCurrentCalendarDocument } from "@/hooks";
 
 export interface PlannerModuleProps {
   isOpen: boolean;
@@ -18,6 +18,8 @@ export interface PlannerModuleProps {
   studentName?: string;
   studentGrade?: string;
   studentSec?: string;
+  organizationId?: string;
+  branchId?: string;
 }
 
 export const PlannerModule: React.FC<PlannerModuleProps> = ({
@@ -27,6 +29,8 @@ export const PlannerModule: React.FC<PlannerModuleProps> = ({
   studentName = "Sara Bekele",
   studentGrade = "7",
   studentSec = "A",
+  organizationId,
+  branchId,
 }) => {
   const [activeTab, setActiveTab] = useState<"weekly" | "academic">(initialTab);
   const [selectedGrade, setSelectedGrade] = useState(studentGrade);
@@ -34,6 +38,16 @@ export const PlannerModule: React.FC<PlannerModuleProps> = ({
   const [gradeDropdownOpen, setGradeDropdownOpen] = useState(false);
   const [secDropdownOpen, setSecDropdownOpen] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const {
+    data: currentCalendarDocument,
+    isLoading: isCalendarLoading,
+    isError: isCalendarError,
+    error: calendarError,
+  } = useCurrentCalendarDocument({
+    organizationId,
+    branchId,
+    enabled: isOpen && activeTab === "academic",
+  });
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -57,22 +71,14 @@ export const PlannerModule: React.FC<PlannerModuleProps> = ({
     { period: "P8", time: "02:45 PM - 03:30 PM", slots: { MON: { subject: "Physical Ed", room: "Field" }, TUE: { subject: "Study Period", room: "Library" }, WED: { subject: "Guidance", room: "R-102" }, THU: { subject: "Club Activity", room: "Campus" }, FRI: { subject: "Review Session", room: "R-102" } } },
   ];
 
-  const academicCalendar = [
-    { term: "TERM 1", event: "Standard Student Registration & Welcome Day", dates: "Sept 04 - Sept 05, 2026", status: "COMPLETED", color: "text-emerald-600 bg-emerald-50 border-emerald-100" },
-    { term: "TERM 1", event: "Parent-Teacher Council Inauguration Meeting", dates: "Sept 12, 2026", status: "COMPLETED", color: "text-emerald-600 bg-emerald-50 border-emerald-100" },
-    { term: "TERM 1", event: "Continuous Assessment Tests (CAT-1)", dates: "Oct 15 - Oct 18, 2026", status: "COMPLETED", color: "text-emerald-600 bg-emerald-50 border-emerald-100" },
-    { term: "TERM 1", event: "National Science & Technology Exhibition Day", dates: "Nov 02, 2026", status: "COMPLETED", color: "text-emerald-600 bg-emerald-50 border-emerald-100" },
-    { term: "TERM 1", event: "Mid-Term Academic Progress Reviews", dates: "Nov 21 - Nov 23, 2026", status: "MASTER STAMPED", color: "text-indigo-600 bg-indigo-50 border-indigo-100" },
-    { term: "TERM 2", event: "Class Resumption & Term syllabus Orientation", dates: "Jan 05, 2027", status: "CONFIRMED", color: "text-indigo-600 bg-indigo-50 border-indigo-100" },
-    { term: "TERM 2", event: "Continuous Assessment Tests (CAT-2)", dates: "Feb 18 - Feb 21, 2027", status: "UPCOMING", color: "text-amber-600 bg-amber-50 border-amber-100" },
-    { term: "TERM 2", event: "Inter-House Athletics & Cultural Day Gala", dates: "March 12, 2027", status: "UPCOMING", color: "text-amber-600 bg-amber-50 border-amber-100" },
-    { term: "TERM 2", event: "Middle Term Subject Evaluations", dates: "April 08 - April 10, 2027", status: "PLANNED", color: "text-slate-500 bg-slate-50 border-slate-100" },
-    { term: "TERM 3", event: "Final Term Integration & Project Work", dates: "May 10 - May 14, 2027", status: "PLANNED", color: "text-slate-500 bg-slate-50 border-slate-100" },
-    { term: "TERM 3", event: "Final Academic Promotional Examination (FAPE)", dates: "June 08 - June 15, 2027", status: "PLANNED", color: "text-slate-500 bg-slate-50 border-slate-100" },
-    { term: "TERM 3", event: "Official Report Cards & Graduation Ceremony", dates: "June 26, 2027", status: "PROPOSED", color: "text-slate-400 bg-slate-50 border-slate-100" },
-  ];
-
   const triggerDownloadPDF = async () => {
+    if (activeTab === "academic") {
+      if (currentCalendarDocument?.downloadUrl) {
+        window.open(currentCalendarDocument.downloadUrl, "_blank", "noopener,noreferrer");
+      }
+      return;
+    }
+
     const element = document.getElementById("printable-document-sheet");
     if (!element) return;
     setIsDownloading(true);
@@ -191,6 +197,13 @@ export const PlannerModule: React.FC<PlannerModuleProps> = ({
   };
 
   const triggerPrint = () => {
+    if (activeTab === "academic") {
+      if (currentCalendarDocument?.downloadUrl) {
+        window.open(currentCalendarDocument.downloadUrl, "_blank", "noopener,noreferrer");
+      }
+      return;
+    }
+
     const originalTitle = document.title;
     document.title = activeTab === "weekly"
       ? `WEEKLY_TIMETABLE_MASTER_GRADE_${selectedGrade}_SEC_${selectedSec}`
@@ -343,26 +356,43 @@ export const PlannerModule: React.FC<PlannerModuleProps> = ({
                 <div className="space-y-3">
                   <div className="bg-[#1a237e] text-white p-2.5 sm:p-3 rounded-xl flex items-center justify-between">
                     <span className="text-[9px] sm:text-[10px] font-black tracking-widest uppercase">ACADEMIC LANDMARKS & TEST SCHEDULES</span>
-                    <span className="text-[9px] sm:text-[10px] font-mono font-bold rounded-full bg-white/10 px-3 py-0.5 sm:py-1">12 LANDMARKS</span>
+                    <span className="text-[9px] sm:text-[10px] font-mono font-bold rounded-full bg-white/10 px-3 py-0.5 sm:py-1">
+                      CURRENT PDF
+                    </span>
                   </div>
-                  <div className="border border-slate-200 bg-white rounded-xl shadow-xs divide-y divide-slate-100 overflow-hidden">
-                    <div className="grid grid-cols-12 gap-1 bg-slate-50/50 p-2.5 sm:p-3 font-bold text-[9px] sm:text-[10px] uppercase text-slate-400 border-b border-slate-200">
-                      <div className="col-span-3 sm:col-span-2">SEGMENT</div>
-                      <div className="col-span-6 sm:col-span-5">LANDMARK EVENT</div>
-                      <div className="col-span-3 font-mono">TIMELINE</div>
-                      <div className="hidden sm:block sm:col-span-2 text-right">STATUS</div>
-                    </div>
-                    {academicCalendar.map((landmark, idx) => (
-                      <div key={idx} className="grid grid-cols-12 gap-1 p-2.5 sm:p-3 hover:bg-slate-50/50 items-center text-xs transition-colors">
-                        <div className="col-span-3 sm:col-span-2"><span className="inline-flex text-[8px] sm:text-[9px] font-extrabold uppercase py-0.5 px-2 rounded-md bg-slate-100 border border-slate-200/50 text-slate-600">{landmark.term}</span></div>
-                        <div className="col-span-6 sm:col-span-5 font-bold text-slate-800 pr-1 leading-tight text-[11px] sm:text-xs">
-                          {landmark.event}
-                          <div className="block sm:hidden text-[8px] mt-1 font-semibold"><span className={`inline-flex px-1 rounded-sm border ${landmark.color}`}>{landmark.status}</span></div>
-                        </div>
-                        <div className="col-span-3 font-mono text-[9px] sm:text-[10px] text-slate-400 leading-tight">{landmark.dates}</div>
-                        <div className="hidden sm:block sm:col-span-2 text-right"><span className={`inline-flex items-center text-[9px] font-black uppercase tracking-wider px-2 py-0.5 sm:py-1 rounded-lg border leading-none ${landmark.color}`}>{landmark.status}</span></div>
+                  <div className="border border-slate-200 bg-white rounded-xl shadow-xs overflow-hidden">
+                    {isCalendarLoading && (
+                      <div className="p-6 text-sm font-medium text-slate-500">
+                        Loading current academic calendar...
                       </div>
-                    ))}
+                    )}
+                    {isCalendarError && (
+                      <div className="p-6 text-sm font-medium text-red-700 bg-red-50/60">
+                        {calendarError?.message ?? "Failed to load the current academic calendar."}
+                      </div>
+                    )}
+                    {!isCalendarLoading && !isCalendarError && !currentCalendarDocument?.downloadUrl && (
+                      <div className="p-6 text-sm font-medium text-slate-500">
+                        No current academic calendar document is available for this branch.
+                      </div>
+                    )}
+                    {!isCalendarLoading && !isCalendarError && currentCalendarDocument?.downloadUrl && (
+                      <div className="space-y-4 p-4">
+                        <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                            Current Document
+                          </p>
+                          <h3 className="mt-1 text-sm font-bold text-slate-800 break-all">
+                            {currentCalendarDocument.fileName ?? "Academic Calendar PDF"}
+                          </h3>
+                        </div>
+                        <iframe
+                          title="Academic Calendar PDF"
+                          src={currentCalendarDocument.downloadUrl}
+                          className="h-[70vh] min-h-[480px] w-full rounded-xl border border-slate-200 bg-white"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

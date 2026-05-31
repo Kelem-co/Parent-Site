@@ -4,7 +4,10 @@
  */
 
 import React, { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useChildren } from "@/hooks";
+import { useBranchIdentity } from "@/hooks/useBranchIdentity";
+import { getParentMe } from "@/services/parentService";
 import {
   LayoutDashboard,
   BarChart3,
@@ -36,11 +39,29 @@ import { NotificationsModule } from "@/components/features/notifications";
 import { ScheduleModule } from "@/components/features/schedule";
 import { AnalyticsModule } from "@/components/features/analytics";
 import { PlannerModule } from "@/components/features/planner";
-import { PARENT_NAME } from "@/lib/mockData";
 import { Child } from "@/types";
+import { ParentMeResponse } from "@/types/api";
+
+export function getParentDisplayName(parentProfile?: ParentMeResponse): string {
+  const fullName = parentProfile?.user_details?.name?.trim();
+  if (fullName) {
+    return fullName;
+  }
+
+  const phoneNumber = parentProfile?.user_details?.phone_number?.trim();
+  if (phoneNumber) {
+    return phoneNumber;
+  }
+
+  return "Parent";
+}
 
 export default function App() {
   const { data: children = [], isLoading, isError, error } = useChildren();
+  const { data: parentProfile } = useQuery({
+    queryKey: ["parent", "me"],
+    queryFn: getParentMe,
+  });
   const [selectedChildIndex, setSelectedChildIndex] = useState(0);
   const [activeModule, setActiveModule] = useState("Dashboard");
   const [isChildModalOpen, setIsChildModalOpen] = useState(false);
@@ -60,6 +81,16 @@ export default function App() {
   }, [toastMessage]);
 
   const child = children[selectedChildIndex];
+  const { data: branchIdentity } = useBranchIdentity(child?.branchId);
+  const schoolName = branchIdentity?.school_name ?? "School";
+  const branchName = branchIdentity?.branch_name ?? child?.branchName ?? "";
+  const parentName = getParentDisplayName(parentProfile);
+  const parentInitials = parentName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || "PA";
 
   if (isLoading) {
     return (
@@ -82,7 +113,19 @@ export default function App() {
     );
   }
 
-  if (!child) return null;
+  if (!child) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center bg-slate-50 p-6">
+        <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-8 shadow-sm text-center">
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">No linked students yet</h1>
+          <p className="mt-3 text-sm text-slate-600 font-medium">
+            Your account is active, but there are no students connected to it right now.
+            Please contact the school admin to link your children to this parent account.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const badges = {
     Messages: child.messages.filter((m) => m.unread).length,
@@ -141,7 +184,7 @@ export default function App() {
             </button>
           </div>
           <div className="px-4 pb-3 pt-1 border-t border-slate-50 bg-white">
-            <h2 className="text-sm font-semibold text-slate-800">Good morning, {PARENT_NAME} 👋</h2>
+            <h2 className="text-sm font-semibold text-slate-800">Good morning, {parentName} 👋</h2>
             <p className="text-xs text-slate-400 mt-0.5 font-medium">{child.name} · Grade {child.grade} · Sec {child.section}</p>
           </div>
         </div>
@@ -218,7 +261,18 @@ export default function App() {
             {!isSidebarCollapsed && <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Parent Mode</p>}
             <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
               <div className="w-8 h-8 rounded-lg bg-[#3949AB] flex items-center justify-center text-white shrink-0 shadow-lg shadow-blue-900/20"><GraduationCap size={20} /></div>
-              {!isSidebarCollapsed && <h1 className="text-[11px] font-black text-slate-900 uppercase leading-tight tracking-tight">Ethio-Global Academy</h1>}
+              {!isSidebarCollapsed && (
+                <div className="min-w-0">
+                  <h1 className="text-[11px] font-black text-slate-900 uppercase leading-tight tracking-tight truncate">
+                    {schoolName}
+                  </h1>
+                  {branchName && (
+                    <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 truncate mt-1">
+                      {branchName}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -248,8 +302,8 @@ export default function App() {
 
           <div className={`border-t border-slate-50 ${isSidebarCollapsed ? "p-3 flex justify-center" : "p-4"}`}>
             <div className={`flex items-center bg-slate-50/50 rounded-xl ${isSidebarCollapsed ? "p-1 justify-center" : "gap-3 p-2"}`}>
-              <div className="w-10 h-10 rounded-full bg-[#3949AB] flex items-center justify-center text-white font-bold text-sm shadow-sm ring-2 ring-white shrink-0">AB</div>
-              {!isSidebarCollapsed && <div><p className="text-xs font-bold text-slate-900 uppercase tracking-tight">Alemayehu Bekele</p><p className="text-[10px] font-medium text-slate-400">Parent Account</p></div>}
+              <div className="w-10 h-10 rounded-full bg-[#3949AB] flex items-center justify-center text-white font-bold text-sm shadow-sm ring-2 ring-white shrink-0">{parentInitials}</div>
+              {!isSidebarCollapsed && <div><p className="text-xs font-bold text-slate-900 uppercase tracking-tight">{parentName}</p><p className="text-[10px] font-medium text-slate-400">Parent Account</p></div>}
             </div>
           </div>
         </aside>
@@ -301,7 +355,19 @@ export default function App() {
       </AnimatePresence>
 
       {/* Planner Modal */}
-      <PlannerModule isOpen={isPlannerModalOpen} onClose={() => setIsPlannerModalOpen(false)} initialTab={plannerTab} studentName={child.name} studentGrade={child.grade} studentSec={child.section} />
+      <PlannerModule
+        isOpen={isPlannerModalOpen}
+        onClose={() => setIsPlannerModalOpen(false)}
+        initialTab={plannerTab}
+        studentName={child.name}
+        studentGrade={child.grade}
+        studentSec={child.section}
+        organizationId={
+          parentProfile?.student_details.find((student) => student.id === child.id)?.organization
+          ?? parentProfile?.organization_ids[0]
+        }
+        branchId={child.branchId}
+      />
 
       {/* Toast */}
       <AnimatePresence>

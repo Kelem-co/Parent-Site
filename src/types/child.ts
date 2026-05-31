@@ -18,6 +18,9 @@ export interface AttendanceLogEntry {
 
 export interface Child {
   id: string;
+  branchId: string;
+  branchName: string;
+  sectionId: string | null;
   name: string;
   initials: string;
   grade: string;
